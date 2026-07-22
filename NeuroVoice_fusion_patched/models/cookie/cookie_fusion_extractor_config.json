@@ -1,0 +1,13 @@
+{
+  "target_sr": null,
+  "top_db": 20,
+  "n_fft": 2048,
+  "hop_length": 512,
+  "center": true,
+  "normalize_audio": false,
+  "threshold": 0.61,
+  "expected_feature_count": 85,
+  "verified_accuracy": 0.9110512129380054,
+  "verified_roc_auc": 0.9140818671020015,
+  "verified_pr_auc": 0.9292906190010002
+}

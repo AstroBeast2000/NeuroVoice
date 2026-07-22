@@ -1,0 +1,21 @@
+﻿venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.wav
+*.mp3
+.env
+.streamlit/secrets.toml
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# Development backups and obsolete files
+*_before_*.py
+*_backup.py
+*.bak
+pages/
+{

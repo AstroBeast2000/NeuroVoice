@@ -1,0 +1,48 @@
+FINAL ALZHEIMER'S SPEECH MODEL EVALUATION
+======================================================================
+
+Evaluation warning:
+The reviewed test set was filtered after previous model-error inspection. Results are therefore post-hoc diagnostic and not an unbiased untouched-test estimate.
+
+Training recordings: 2080
+Reviewed test recordings: 371
+
+Validation-selected configuration:
+Threshold: 0.48
+Models: ['word_tfidf_svm', 'char_tfidf_svm', 'linguistic_logreg', 'word_char_linguistic_logreg']
+Weights: [0.45, 0.15000000000000002, 0.05, 0.35000000000000003]
+
+Final metrics:
+model: validation_selected_word_char_linguistic_ensemble
+evaluation_status: post_hoc_quality_filtered_test_set
+threshold: 0.48
+accuracy: 0.9002695417789758
+balanced_accuracy: 0.8868734506318399
+f1: 0.8683274021352313
+precision: 0.9242424242424242
+recall_sensitivity: 0.8187919463087249
+specificity: 0.954954954954955
+roc_auc: 0.9138702460850112
+average_precision: 0.9172022756473206
+mcc: 0.7922871789789007
+tn: 212
+fp: 10
+fn: 27
+tp: 122
+n_test: 371
+weights: [0.45, 0.15000000000000002, 0.05, 0.35000000000000003]
+columns: ['word_tfidf_svm', 'char_tfidf_svm', 'linguistic_logreg', 'word_char_linguistic_logreg']
+
+Confusion matrix:
+[[212  10]
+ [ 27 122]]
+
+Classification report:
+              precision    recall  f1-score   support
+
+     Control     0.8870    0.9550    0.9197       222
+          AD     0.9242    0.8188    0.8683       149
+
+    accuracy                         0.9003       371
+   macro avg     0.9056    0.8869    0.8940       371
+weighted avg     0.9020    0.9003    0.8991       371
