@@ -232,7 +232,11 @@ with left:
         <li>pronoun use;</li>
         <li>scene-specific information units;</li>
         <li>sentence length and transcript length;</li>
-        <li>combined lexical and linguistic features.</li>
+        <li>combined transcript patterns;</li>
+        <li>recording duration and energy;</li>
+        <li>voiced speech and silence measurements;</li>
+        <li>spectral, MFCC and chroma acoustic features;</li>
+        <li>fusion of transcript and acoustic probabilities.</li>
     </ul>
 </div>
 """
@@ -334,9 +338,9 @@ st.write("")
 
 st.info(
     """
-The four picture-description outputs are combined using weights of 0.45,
+The transcript and acoustic probabilities are combined by the trained stacking model.
 0.15, 0.05 and 0.35. The final ensemble output is compared with a decision
-threshold of 0.48.
+threshold of 0.61.
 """
 )
 
@@ -444,3 +448,4 @@ disease or another condition. The thresholds were selected during model
 development and require additional external and clinical validation.
 """
 )
+
