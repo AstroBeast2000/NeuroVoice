@@ -1,4 +1,4 @@
-import __main__
+﻿import __main__
 import time
 import wave
 from io import BytesIO
@@ -142,7 +142,7 @@ st.markdown("""
 st.title("NeuroVoice Language Assessment")
 st.caption(
     "Complete the tasks in order. Audio is transcribed locally with the same "
-    "Whisper small-model method used during dataset preparation."
+    "memory-optimized Whisper method used during dataset preparation."
 )
 
 
@@ -717,7 +717,7 @@ elif stage == "fluency_instructions":
     st.write(
         """
         **Name as many different animals as you can. Record your response for at least 60 seconds.**
-        Do not describe the animals—only say their names. Keep going until the
+        Do not describe the animalsâ€”only say their names. Keep going until the
         recording is finished.
         """
     )
@@ -1107,4 +1107,5 @@ elif stage == "results":
         use_container_width=True,
     ):
         reset_assessment()
+
 

@@ -1,25 +1,13 @@
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from collections import Counter
-import gc
 from pathlib import Path
 
-import torch
-import whisper
 
-
-WHISPER_MODEL_NAME = "base.en"
-
-
-def load_whisper_model():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    return whisper.load_model(
-        WHISPER_MODEL_NAME,
-        device=device,
-    )
+WHISPER_MODEL_NAME = "tiny.en"
 
 
 def normalize_audio(source_path: str, output_path: str) -> None:
@@ -36,11 +24,7 @@ def normalize_audio(source_path: str, output_path: str) -> None:
         "-ar",
         "16000",
         "-af",
-        (
-            "highpass=f=70,"
-            "lowpass=f=7600,"
-            "loudnorm=I=-18:TP=-2:LRA=11"
-        ),
+        "highpass=f=70,lowpass=f=7600",
         output_path,
     ]
 
@@ -61,7 +45,6 @@ def normalize_audio(source_path: str, output_path: str) -> None:
 def normalize_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\s+([,.!?;:])", r"\1", text)
-
     return text
 
 
@@ -82,9 +65,7 @@ def repeated_phrase_ratio(words: list[str]) -> float:
 
         counts = Counter(phrases)
         most_common_count = counts.most_common(1)[0][1]
-
-        covered_words = most_common_count * size
-        ratio = covered_words / len(words)
+        ratio = most_common_count * size / len(words)
         highest_ratio = max(highest_ratio, ratio)
 
     return highest_ratio
@@ -112,42 +93,94 @@ def validate_transcript(
 
     if any(phrase in lowered for phrase in prompt_leak_phrases):
         raise RuntimeError(
-            "The transcription was unreliable and contained "
-            "generated boilerplate. Please record again."
+            "The transcription contained generated boilerplate. "
+            "Please record again."
         )
 
-    phrase_ratio = repeated_phrase_ratio(words)
-
-    if phrase_ratio >= 0.65:
+    if repeated_phrase_ratio(words) >= 0.65:
         raise RuntimeError(
-            "The transcription contained an artificial repeated-phrase "
-            "loop. Please record again with less background noise."
+            "The transcription contained an artificial repeated phrase loop."
         )
 
     unique_ratio = len(set(words)) / len(words)
 
     if len(words) >= 20 and unique_ratio < 0.18:
         raise RuntimeError(
-            "The transcription was excessively repetitive and could "
-            "not be analyzed reliably. Please record again."
+            "The transcription was excessively repetitive."
         )
 
-    if task_name == "cookie":
-        if len(words) < 10:
-            raise RuntimeError(
-                "Too little understandable speech was detected for the "
-                "Cookie Theft Picture Description Task."
-            )
+    if task_name == "cookie" and len(words) < 10:
+        raise RuntimeError(
+            "Too little understandable speech was detected for the "
+            "Cookie Theft task."
+        )
 
-    elif task_name == "fluency":
-        if len(words) < 3:
-            raise RuntimeError(
-                "Too few understandable words were detected for the "
-                "Semantic Verbal Fluency Test."
-            )
+    if task_name == "fluency" and len(words) < 3:
+        raise RuntimeError(
+            "Too few understandable words were detected for the "
+            "verbal fluency task."
+        )
 
-    else:
-        raise ValueError(f"Unknown task name: {task_name}")
+
+def transcribe_with_subprocess(
+    audio_path: str,
+    output_directory: str,
+) -> str:
+    command = [
+        sys.executable,
+        "-m",
+        "whisper",
+        audio_path,
+        "--model",
+        WHISPER_MODEL_NAME,
+        "--language",
+        "English",
+        "--task",
+        "transcribe",
+        "--device",
+        "cpu",
+        "--fp16",
+        "False",
+        "--temperature",
+        "0",
+        "--condition_on_previous_text",
+        "False",
+        "--output_format",
+        "txt",
+        "--output_dir",
+        output_directory,
+        "--verbose",
+        "False",
+    ]
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Whisper transcription failed:\n"
+            + result.stderr[-3000:]
+        )
+
+    transcript_path = (
+        Path(output_directory)
+        / f"{Path(audio_path).stem}.txt"
+    )
+
+    if not transcript_path.exists():
+        raise RuntimeError(
+            "Whisper finished but did not create a transcript."
+        )
+
+    return transcript_path.read_text(
+        encoding="utf-8",
+        errors="ignore",
+    )
 
 
 def transcribe_audio_bytes(
@@ -157,46 +190,29 @@ def transcribe_audio_bytes(
     if not audio_bytes:
         raise ValueError("No audio data was received.")
 
-    source_path = None
-    normalized_path = None
+    with tempfile.TemporaryDirectory() as temp_directory:
+        source_path = Path(temp_directory) / "source.wav"
+        normalized_path = Path(temp_directory) / "normalized.wav"
+        transcript_directory = Path(temp_directory) / "transcript"
 
-    try:
-        with tempfile.NamedTemporaryFile(
-            suffix=".wav",
-            delete=False,
-        ) as source_file:
-            source_file.write(audio_bytes)
-            source_path = source_file.name
+        transcript_directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-        with tempfile.NamedTemporaryFile(
-            suffix=".wav",
-            delete=False,
-        ) as normalized_file:
-            normalized_path = normalized_file.name
+        source_path.write_bytes(audio_bytes)
 
         normalize_audio(
-            source_path,
-            normalized_path,
+            str(source_path),
+            str(normalized_path),
         )
 
-        model = load_whisper_model()
-
-        result = model.transcribe(
-            normalized_path,
-            language="en",
-            task="transcribe",
-            temperature=0,
-            condition_on_previous_text=False,
-            fp16=torch.cuda.is_available(),
-            no_speech_threshold=0.55,
-            logprob_threshold=-1.0,
-            compression_ratio_threshold=2.2,
-            verbose=False,
+        transcript = transcribe_with_subprocess(
+            str(normalized_path),
+            str(transcript_directory),
         )
 
-        transcript = normalize_text(
-            result.get("text", "")
-        )
+        transcript = normalize_text(transcript)
 
         validate_transcript(
             transcript,
@@ -204,20 +220,3 @@ def transcribe_audio_bytes(
         )
 
         return transcript
-
-    finally:
-        # Release Whisper before the acoustic fusion model loads.
-        if "model" in locals():
-            del model
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-        gc.collect()
-
-        for file_path in (
-            source_path,
-            normalized_path,
-        ):
-            if file_path and Path(file_path).exists():
-                os.remove(file_path)
