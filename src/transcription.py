@@ -1,19 +1,18 @@
-﻿import os
+import os
 import re
 import subprocess
 import tempfile
 from collections import Counter
-from functools import lru_cache
+import gc
 from pathlib import Path
 
 import torch
 import whisper
 
 
-WHISPER_MODEL_NAME = "small"
+WHISPER_MODEL_NAME = "base.en"
 
 
-@lru_cache(maxsize=1)
 def load_whisper_model():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -207,6 +206,15 @@ def transcribe_audio_bytes(
         return transcript
 
     finally:
+        # Release Whisper before the acoustic fusion model loads.
+        if "model" in locals():
+            del model
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        gc.collect()
+
         for file_path in (
             source_path,
             normalized_path,
