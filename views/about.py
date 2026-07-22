@@ -124,3 +124,22 @@ NeuroVoice is not a medical device and does not provide a diagnosis.
 Its outputs are intended for educational and research demonstration only.
 """
 )
+
+st.divider()
+st.header("Privacy and data handling")
+
+st.markdown(
+    """
+NeuroVoice processes audio recordings to generate transcripts and research-model results.
+
+- Recordings are used temporarily for transcription and analysis.
+- NeuroVoice does not intentionally save participant recordings after processing.
+- Recordings and transcripts are not used to train the models through this website.
+- Users should not submit names, addresses, medical-record numbers, or other identifying information.
+- Temporary files may exist briefly while the server processes a recording.
+- The hosting provider may maintain technical logs under its own policies.
+- Downloaded reports remain on the user's device and are the user's responsibility.
+
+NeuroVoice is an experimental research and educational project. Its results are not a medical diagnosis, clinical screening result, disease probability, or substitute for evaluation by a qualified healthcare professional.
+"""
+)
