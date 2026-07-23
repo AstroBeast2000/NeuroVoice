@@ -1,48 +1,63 @@
-FINAL ALZHEIMER'S SPEECH MODEL EVALUATION
+﻿FINAL ALZHEIMER'S SPEECH MODEL EVALUATION
 ======================================================================
 
 Evaluation warning:
-The reviewed test set was filtered after previous model-error inspection. Results are therefore post-hoc diagnostic and not an unbiased untouched-test estimate.
+The reviewed test set was filtered after previous model-error inspection.
+Results are therefore post-hoc diagnostic and are not an unbiased,
+untouched-test estimate or a clinical validation result.
 
 Training recordings: 2080
 Reviewed test recordings: 371
 
-Validation-selected configuration:
-Threshold: 0.48
-Models: ['word_tfidf_svm', 'char_tfidf_svm', 'linguistic_logreg', 'word_char_linguistic_logreg']
-Weights: [0.45, 0.15000000000000002, 0.05, 0.35000000000000003]
+Deployment fusion configuration:
+Threshold: 0.61
+Transcript model: calibrated TF-IDF linear support vector classifier
+Acoustic model: Extra Trees classifier using 85 handcrafted audio features
+Fusion model: logistic-regression stacker combining transcript and acoustic probabilities
+
+Acoustic preprocessing:
+Sample rate: native recording sample rate
+Silence threshold: top_db=20
+FFT size: 2048
+Hop length: 512
+Centering: enabled
+Peak normalization: disabled
 
 Final metrics:
-model: validation_selected_word_char_linguistic_ensemble
+model: transcript_acoustic_stacking_fusion
 evaluation_status: post_hoc_quality_filtered_test_set
-threshold: 0.48
-accuracy: 0.9002695417789758
-balanced_accuracy: 0.8868734506318399
-f1: 0.8683274021352313
-precision: 0.9242424242424242
-recall_sensitivity: 0.8187919463087249
-specificity: 0.954954954954955
-roc_auc: 0.9138702460850112
-average_precision: 0.9172022756473206
-mcc: 0.7922871789789007
-tn: 212
-fp: 10
-fn: 27
-tp: 122
+threshold: 0.61
+accuracy: 0.9110512129380054
+balanced_accuracy: 0.8980893645323176
+f1: 0.8825622775800712
+precision: 0.9393939393939394
+recall_sensitivity: 0.8322147651006712
+specificity: 0.963963963963964
+roc_auc: 0.9140818671020015
+average_precision: 0.9292906190010002
+mcc: 0.8153
+tn: 214
+fp: 8
+fn: 25
+tp: 124
 n_test: 371
-weights: [0.45, 0.15000000000000002, 0.05, 0.35000000000000003]
-columns: ['word_tfidf_svm', 'char_tfidf_svm', 'linguistic_logreg', 'word_char_linguistic_logreg']
+
+Fusion reconstruction verification:
+fusion_probability_correlation_with_saved_predictions: 0.998848
+changed_predictions_vs_saved_pipeline: 1
+saved_pipeline_accuracy: 0.9137466307277629
+reconstructed_deployment_accuracy: 0.9110512129380054
 
 Confusion matrix:
-[[212  10]
- [ 27 122]]
+[[214   8]
+ [ 25 124]]
 
 Classification report:
               precision    recall  f1-score   support
 
-     Control     0.8870    0.9550    0.9197       222
-          AD     0.9242    0.8188    0.8683       149
+     Control     0.8954    0.9640    0.9284       222
+          AD     0.9394    0.8322    0.8826       149
 
-    accuracy                         0.9003       371
-   macro avg     0.9056    0.8869    0.8940       371
-weighted avg     0.9020    0.9003    0.8991       371
+    accuracy                         0.9111       371
+   macro avg     0.9174    0.8981    0.9055       371
+weighted avg     0.9131    0.9111    0.9100       371

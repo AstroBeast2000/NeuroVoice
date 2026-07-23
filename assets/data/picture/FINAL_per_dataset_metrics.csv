@@ -1,4 +1,2 @@
-dataset,n,accuracy,balanced_accuracy,f1,precision,recall,specificity,roc_auc,tn,fp,fn,tp
-Lu,11,1.0,1.0,1.0,1.0,1.0,1.0,1.0,4,0,0,7
-Pitt,107,0.897196261682243,0.8990112994350282,0.9043478260869565,0.9285714285714286,0.8813559322033898,0.9166666666666666,0.9378531073446328,44,4,7,52
-TrainTest,253,0.8972332015810277,0.8618710134656272,0.8289473684210527,0.9130434782608695,0.7590361445783133,0.9647058823529412,0.8866052445074415,164,6,20,63
+﻿dataset,note
+Not displayed,"Dataset-specific values from the previous text ensemble were removed because equivalent fusion-model metrics have not yet been recomputed."

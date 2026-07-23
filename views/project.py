@@ -193,24 +193,58 @@ with models_tab:
     st.subheader("Cookie Theft Picture Description Task model")
     st.write(
         """
-        The picture-description system is an ensemble of four components:
+        The current picture-description system uses a transcript-and-acoustic
+        fusion model. The transcript and recording are analyzed separately,
+        and their probabilities are combined by a trained stacking classifier.
         """
     )
+
     st.markdown(
         """
-        - word-level TF-IDF with a support vector machine;
-        - character-level TF-IDF with a support vector machine;
-        - logistic regression using engineered linguistic features;
-        - logistic regression combining word, character, and linguistic features.
+        - **Transcript model:** TF-IDF language features with a calibrated
+          linear support vector classifier.
+        - **Acoustic model:** an Extra Trees classifier using 85 handcrafted
+          recording features.
+        - **Fusion model:** logistic regression combining the transcript and
+          acoustic probabilities.
         """
     )
+
     st.write(
         """
-        Their outputs are combined using weights of **0.45, 0.15, 0.05, and 0.35**.
-        The selected decision threshold is **0.48**. On the quality-reviewed evaluation set of
-        371 samples, the reported balanced accuracy was **88.69%** and ROC-AUC was **91.39%**.
-        These are internal research results, not clinical validation results.
+        The acoustic features include recording duration, energy, silence and
+        voiced-segment measurements, zero-crossing rate, spectral centroid,
+        spectral bandwidth, spectral rolloff, spectral flatness, 20 MFCC
+        means and standard deviations, and 12 chroma means and standard
+        deviations.
+
+        The deployed feature extractor uses the recording's native sample
+        rate, a silence threshold of `top_db=20`, an FFT size of 2,048, and a
+        hop length of 512. The selected fusion decision threshold is
+        **0.61**.
         """
+    )
+
+    st.write(
+        """
+        On the final quality-reviewed evaluation subset of **371 recordings**,
+        the reconstructed deployment pipeline achieved:
+
+        - **Accuracy:** 91.11%
+        - **Balanced accuracy:** 89.81%
+        - **ROC-AUC:** 91.41%
+        - **PR-AUC:** 92.93%
+
+        Its fusion probabilities had a correlation of **0.99885** with the
+        originally saved fusion predictions, and only **1 of 371**
+        classifications changed because the original acoustic extraction
+        source code was unavailable and had to be reconstructed.
+        """
+    )
+
+    st.caption(
+        "These are internal research evaluation results and do not represent "
+        "clinical validation."
     )
 
     st.subheader("Semantic Verbal Fluency Test model")
