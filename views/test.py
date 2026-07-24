@@ -348,107 +348,24 @@ def _nv_calculate_overall_score():
 
 
 def _nv_render_overall_results():
+    """Display only the final weighted percentage on the results page."""
     result = _nv_calculate_overall_score()
 
-    if not result["available"]:
+    if not result.get("available", False):
         st.warning(
-            "The overall screening score could not be calculated "
-            "because one or both speech-model probabilities were "
-            "not available."
+            "The overall score could not be calculated because one "
+            "or both speech-model probabilities were unavailable."
         )
         return
 
-    overall_percent = result["overall_percent"]
-    cookie_percent = result["cookie_percent"]
-    fluency_percent = result["fluency_percent"]
+    overall_percent = float(result["overall_percent"])
 
-    if result["memory_completed"]:
-        memory_percent = result["memory_percent"]
-
-        weighting_text = (
-            "50% semantic fluency + 30% Cookie Theft + "
-            "20% memory-derived score"
-        )
-
-        memory_text = (
-            f"{memory_percent:.1f}% "
-            f"(derived from "
-            f"{result['memory_result']['recall_percent']}% recall)"
-        )
-    else:
-        weighting_text = (
-            "60% semantic fluency + 40% Cookie Theft"
-        )
-        memory_text = "Not completed"
-
-    st.markdown(
-        f"""
-        <div style="
-            margin-top: 1.2rem;
-            margin-bottom: 1.2rem;
-            padding: 1.35rem;
-            border: 1px solid rgba(148, 163, 184, 0.28);
-            border-radius: 18px;
-            background:
-                linear-gradient(
-                    145deg,
-                    rgba(15, 23, 42, 0.96),
-                    rgba(30, 41, 59, 0.96)
-                );
-        ">
-            <div style="
-                color: #94a3b8;
-                font-size: 0.82rem;
-                font-weight: 700;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-            ">
-                Experimental combined screening result
-            </div>
-
-            <div style="
-                margin-top: 0.35rem;
-                color: #f8fafc;
-                font-size: 2.3rem;
-                line-height: 1.05;
-                font-weight: 800;
-            ">
-                {overall_percent:.1f}%
-            </div>
-
-            <div style="
-                margin-top: 0.45rem;
-                color: #cbd5e1;
-                font-size: 1rem;
-            ">
-                Overall model-estimated Alzheimer's screening score
-            </div>
-
-            <div style="
-                margin-top: 1rem;
-                color: #e2e8f0;
-                font-size: 0.93rem;
-                line-height: 1.65;
-            ">
-                <strong>Semantic fluency model:</strong>
-                {fluency_percent:.1f}%<br>
-                <strong>Cookie Theft model:</strong>
-                {cookie_percent:.1f}%<br>
-                <strong>Memory-derived score:</strong>
-                {memory_text}<br>
-                <strong>Weighting:</strong>
-                {weighting_text}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    st.markdown("## Overall Alzheimer's screening score")
+    st.metric(
+        label="Weighted overall result",
+        value=f"{overall_percent:.1f}%",
     )
 
-    st.caption(
-        "This is a custom experimental screening score. It is not "
-        "a diagnosis or a clinically validated probability that a "
-        "person has Alzheimer's disease."
-    )
 
 
 def _nv_append_overall_to_pdf(story, styles):
