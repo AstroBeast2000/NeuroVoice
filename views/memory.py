@@ -555,25 +555,29 @@ def auto_refresh(key: str) -> None:
         )
 
 
+
 # ============================================================
 # HEADER
 # ============================================================
 
-st.markdown(
-    """
-    <div class="nv-kicker">Optional cognitive activity</div>
-    <h1 class="nv-title">Memory Challenge</h1>
-    <div class="nv-subtitle">
-        Study ten words, complete a brief visual-attention
-        activity, and then recall as many of the original words
-        as possible. This activity takes about two minutes.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 initialize_state()
 
+# Do not render the large page header during timed phases.
+# Streamlit reruns once per second for the timers, so rendering
+# this header during those phases makes it visibly flash.
+if st.session_state.memory_phase not in {"study", "distraction"}:
+    st.markdown(
+        """
+        <div class="nv-kicker">Optional cognitive activity</div>
+        <h1 class="nv-title">Memory Challenge</h1>
+        <div class="nv-subtitle">
+            Study ten words, complete a brief visual-attention
+            activity, and then recall as many of the original words
+            as possible. This activity takes about two minutes.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ============================================================
 # INTRO PHASE
