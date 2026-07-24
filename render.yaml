@@ -16,6 +16,7 @@
       - key: TOKENIZERS_PARALLELISM
         value: "false"
       - key: WHISPER_MODEL_NAME
-        value: "tiny.en"
+        value: "small.en"
       - key: WHISPER_TIMEOUT_SECONDS
         value: "240"
+

@@ -1,2 +1,2 @@
-threshold,accuracy,balanced_accuracy,f1,precision,recall,roc_auc,tn,fp,fn,tp,weights,columns
-0.48,0.8450363196125908,0.8433774523608373,0.8306878306878307,0.8870056497175142,0.7810945273631841,0.8693795175068058,192,20,44,157,"[0.45, 0.15000000000000002, 0.05, 0.35000000000000003]","['word_tfidf_svm', 'char_tfidf_svm', 'linguistic_logreg', 'word_char_linguistic_logreg']"
+﻿"threshold","accuracy","balanced_accuracy","f1","precision","recall","roc_auc","tn","fp","fn","tp","weights","columns"
+"0.61","0.8450363196125908","0.8433774523608373","0.8306878306878307","0.8870056497175142","0.7810945273631841","0.8693795175068058","192","20","44","157","[0.45, 0.15000000000000002, 0.05, 0.35000000000000003]","['word_tfidf_svm', 'char_tfidf_svm', 'linguistic_logreg', 'word_char_linguistic_logreg']"
