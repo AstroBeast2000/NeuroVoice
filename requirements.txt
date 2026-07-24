@@ -7,3 +7,5 @@ scipy==1.15.3
 streamlit==1.59.2
 torch==2.8.0
 openai-whisper
+
+streamlit-autorefresh==1.0.1

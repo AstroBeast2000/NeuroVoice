@@ -1,4 +1,15 @@
-﻿import __main__
+﻿# NEUROVOICE_OPTIONAL_MEMORY_ROUTE
+if (
+    st.session_state.get("cookie_result") is not None
+    and st.session_state.get("fluency_result") is not None
+    and not st.session_state.get(
+        "memory_choice_complete",
+        False,
+    )
+):
+    st.switch_page("views/memory.py")
+
+import __main__
 import time
 import wave
 from io import BytesIO
@@ -1107,5 +1118,6 @@ elif stage == "results":
         use_container_width=True,
     ):
         reset_assessment()
+
 
 
