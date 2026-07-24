@@ -1,4 +1,13 @@
-﻿# NEUROVOICE_OPTIONAL_MEMORY_ROUTE
+﻿import __main__
+import time
+import wave
+from io import BytesIO
+from pathlib import Path
+
+import streamlit as st
+
+
+# NEUROVOICE_OPTIONAL_MEMORY_ROUTE
 if (
     st.session_state.get("cookie_result") is not None
     and st.session_state.get("fluency_result") is not None
@@ -8,15 +17,6 @@ if (
     )
 ):
     st.switch_page("views/memory.py")
-
-import __main__
-import time
-import wave
-from io import BytesIO
-from pathlib import Path
-
-import streamlit as st
-
 from src.linguistic_features import LinguisticFeatures
 from src.cookie_model import CookieTheftEnsemble
 from src.fluency_model_v2 import AnimalFluencyModel
@@ -1118,6 +1118,7 @@ elif stage == "results":
         use_container_width=True,
     ):
         reset_assessment()
+
 
 
 
