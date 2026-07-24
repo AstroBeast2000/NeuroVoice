@@ -23,6 +23,788 @@ from src.fluency_model_v2 import AnimalFluencyModel
 from src.transcription import transcribe_audio_bytes
 
 
+# NEUROVOICE_OVERALL_WEIGHTING_HELPERS
+def _nv_clamp_probability(value):
+    """Convert a probability-like value to the range 0.0 to 1.0."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if value != value:
+        return None
+
+    # Accept either 0-1 probabilities or 0-100 percentages.
+    if 1.0 < value <= 100.0:
+        value = value / 100.0
+
+    if not 0.0 <= value <= 1.0:
+        return None
+
+    return max(0.0, min(1.0, value))
+
+
+def _nv_extract_probability_from_value(value):
+    """Extract a positive-class probability from common result structures."""
+    direct = _nv_clamp_probability(value)
+    if direct is not None:
+        return direct
+
+    if isinstance(value, dict):
+        preferred_keys = (
+            "probability",
+            "positive_probability",
+            "positive_class_probability",
+            "ad_probability",
+            "risk_probability",
+            "model_probability",
+            "score",
+            "risk_score",
+            "confidence",
+        )
+
+        normalized = {
+            str(key).strip().lower(): item
+            for key, item in value.items()
+        }
+
+        for key in preferred_keys:
+            if key in normalized:
+                extracted = _nv_clamp_probability(normalized[key])
+                if extracted is not None:
+                    return extracted
+
+        for key, item in normalized.items():
+            if any(
+                token in key
+                for token in (
+                    "probability",
+                    "proba",
+                    "risk",
+                    "score",
+                    "confidence",
+                )
+            ):
+                extracted = _nv_clamp_probability(item)
+                if extracted is not None:
+                    return extracted
+
+    for attribute in (
+        "probability",
+        "positive_probability",
+        "positive_class_probability",
+        "ad_probability",
+        "risk_probability",
+        "score",
+        "risk_score",
+        "confidence",
+    ):
+        if hasattr(value, attribute):
+            extracted = _nv_clamp_probability(
+                getattr(value, attribute)
+            )
+            if extracted is not None:
+                return extracted
+
+    return None
+
+
+def _nv_find_task_probability(task_tokens):
+    """
+    Find a model probability in Streamlit session state.
+
+    A matching session-state path must contain a task token such as
+    'cookie' or 'fluency'. Probability-like child values are preferred.
+    """
+    candidates = []
+
+    def walk(value, path, depth=0):
+        if depth > 5:
+            return
+
+        path_text = ".".join(path).lower()
+        has_task_token = any(
+            token in path_text
+            for token in task_tokens
+        )
+
+        if has_task_token:
+            probability = _nv_extract_probability_from_value(value)
+
+            if probability is not None:
+                score = 0
+
+                if any(
+                    token in path_text
+                    for token in (
+                        "probability",
+                        "proba",
+                        "risk",
+                        "score",
+                        "result",
+                        "prediction",
+                    )
+                ):
+                    score += 10
+
+                if "threshold" in path_text:
+                    score -= 20
+
+                if "label" in path_text:
+                    score -= 10
+
+                candidates.append(
+                    (score, len(path), path_text, probability)
+                )
+
+        if isinstance(value, dict):
+            for key, item in value.items():
+                walk(
+                    item,
+                    path + [str(key)],
+                    depth + 1,
+                )
+
+        elif isinstance(value, (list, tuple)):
+            for index, item in enumerate(value[:20]):
+                walk(
+                    item,
+                    path + [str(index)],
+                    depth + 1,
+                )
+
+    for key in list(st.session_state.keys()):
+        try:
+            value = st.session_state[key]
+        except Exception:
+            continue
+
+        walk(value, [str(key)])
+
+    if not candidates:
+        return None, None
+
+    candidates.sort(
+        key=lambda item: (
+            item[0],
+            -item[1],
+        ),
+        reverse=True,
+    )
+
+    _, _, path, probability = candidates[0]
+    return probability, path
+
+
+def _nv_get_memory_result():
+    result = st.session_state.get("memory_result")
+
+    if not isinstance(result, dict):
+        return None
+
+    recall_percent = result.get("recall_percent")
+
+    try:
+        recall_percent = float(recall_percent)
+    except (TypeError, ValueError):
+        return None
+
+    if not 0.0 <= recall_percent <= 100.0:
+        return None
+
+    return result
+
+
+def _nv_calculate_overall_score():
+    """
+    Calculate the custom experimental overall screening score.
+
+    Memory completed:
+      50% fluency + 30% Cookie Theft + 20% memory-derived score
+
+    Memory skipped:
+      60% fluency + 40% Cookie Theft
+
+    Memory-derived score:
+      1 - recall percentage
+    """
+    cookie_probability, cookie_path = _nv_find_task_probability(
+        (
+            "cookie",
+            "picture",
+            "description",
+        )
+    )
+
+    fluency_probability, fluency_path = _nv_find_task_probability(
+        (
+            "fluency",
+            "animal",
+            "semantic",
+        )
+    )
+
+    if cookie_probability is None or fluency_probability is None:
+        return {
+            "available": False,
+            "cookie_probability": cookie_probability,
+            "fluency_probability": fluency_probability,
+            "cookie_source": cookie_path,
+            "fluency_source": fluency_path,
+            "memory_result": _nv_get_memory_result(),
+            "error": (
+                "The Cookie Theft or semantic-fluency probability "
+                "could not be found in session state."
+            ),
+        }
+
+    memory_result = _nv_get_memory_result()
+
+    if memory_result is not None:
+        recall_percent = float(
+            memory_result["recall_percent"]
+        )
+
+        memory_score = max(
+            0.0,
+            min(
+                1.0,
+                1.0 - recall_percent / 100.0,
+            ),
+        )
+
+        overall_score = (
+            0.50 * fluency_probability
+            + 0.30 * cookie_probability
+            + 0.20 * memory_score
+        )
+
+        weighting = {
+            "fluency": 0.50,
+            "cookie": 0.30,
+            "memory": 0.20,
+        }
+
+        memory_completed = True
+
+    else:
+        memory_score = None
+
+        overall_score = (
+            0.60 * fluency_probability
+            + 0.40 * cookie_probability
+        )
+
+        weighting = {
+            "fluency": 0.60,
+            "cookie": 0.40,
+            "memory": 0.00,
+        }
+
+        memory_completed = False
+
+    overall_score = max(
+        0.0,
+        min(1.0, overall_score),
+    )
+
+    result = {
+        "available": True,
+        "overall_score": overall_score,
+        "overall_percent": round(
+            overall_score * 100.0,
+            1,
+        ),
+        "cookie_probability": cookie_probability,
+        "cookie_percent": round(
+            cookie_probability * 100.0,
+            1,
+        ),
+        "fluency_probability": fluency_probability,
+        "fluency_percent": round(
+            fluency_probability * 100.0,
+            1,
+        ),
+        "memory_score": memory_score,
+        "memory_percent": (
+            round(memory_score * 100.0, 1)
+            if memory_score is not None
+            else None
+        ),
+        "memory_completed": memory_completed,
+        "memory_result": memory_result,
+        "weighting": weighting,
+        "cookie_source": cookie_path,
+        "fluency_source": fluency_path,
+    }
+
+    st.session_state["overall_screening_result"] = result
+    st.session_state["overall_screening_score"] = overall_score
+    st.session_state["overall_screening_percent"] = result[
+        "overall_percent"
+    ]
+
+    return result
+
+
+def _nv_render_overall_results():
+    result = _nv_calculate_overall_score()
+
+    if not result["available"]:
+        st.warning(
+            "The overall screening score could not be calculated "
+            "because one or both speech-model probabilities were "
+            "not available."
+        )
+        return
+
+    overall_percent = result["overall_percent"]
+    cookie_percent = result["cookie_percent"]
+    fluency_percent = result["fluency_percent"]
+
+    if result["memory_completed"]:
+        memory_percent = result["memory_percent"]
+
+        weighting_text = (
+            "50% semantic fluency + 30% Cookie Theft + "
+            "20% memory-derived score"
+        )
+
+        memory_text = (
+            f"{memory_percent:.1f}% "
+            f"(derived from "
+            f"{result['memory_result']['recall_percent']}% recall)"
+        )
+    else:
+        weighting_text = (
+            "60% semantic fluency + 40% Cookie Theft"
+        )
+        memory_text = "Not completed"
+
+    st.markdown(
+        f"""
+        <div style="
+            margin-top: 1.2rem;
+            margin-bottom: 1.2rem;
+            padding: 1.35rem;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            border-radius: 18px;
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(15, 23, 42, 0.96),
+                    rgba(30, 41, 59, 0.96)
+                );
+        ">
+            <div style="
+                color: #94a3b8;
+                font-size: 0.82rem;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            ">
+                Experimental combined screening result
+            </div>
+
+            <div style="
+                margin-top: 0.35rem;
+                color: #f8fafc;
+                font-size: 2.3rem;
+                line-height: 1.05;
+                font-weight: 800;
+            ">
+                {overall_percent:.1f}%
+            </div>
+
+            <div style="
+                margin-top: 0.45rem;
+                color: #cbd5e1;
+                font-size: 1rem;
+            ">
+                Overall model-estimated Alzheimer's screening score
+            </div>
+
+            <div style="
+                margin-top: 1rem;
+                color: #e2e8f0;
+                font-size: 0.93rem;
+                line-height: 1.65;
+            ">
+                <strong>Semantic fluency model:</strong>
+                {fluency_percent:.1f}%<br>
+                <strong>Cookie Theft model:</strong>
+                {cookie_percent:.1f}%<br>
+                <strong>Memory-derived score:</strong>
+                {memory_text}<br>
+                <strong>Weighting:</strong>
+                {weighting_text}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.caption(
+        "This is a custom experimental screening score. It is not "
+        "a diagnosis or a clinically validated probability that a "
+        "person has Alzheimer's disease."
+    )
+
+
+def _nv_append_overall_to_pdf(story, styles):
+    """Append overall weighting and optional memory results to a PDF story."""
+    result = _nv_calculate_overall_score()
+
+    if not result["available"]:
+        return
+
+    try:
+        from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+    except Exception:
+        return
+
+    heading_style = styles.get(
+        "Heading2",
+        styles["Normal"],
+    )
+    normal_style = styles.get(
+        "BodyText",
+        styles["Normal"],
+    )
+
+    story.append(Spacer(1, 0.18 * inch))
+    story.append(
+        Paragraph(
+            "Overall Experimental Screening Score",
+            heading_style,
+        )
+    )
+    story.append(Spacer(1, 0.08 * inch))
+
+    story.append(
+        Paragraph(
+            (
+                "<b>Overall model-estimated Alzheimer's screening "
+                f"score: {result['overall_percent']:.1f}%</b>"
+            ),
+            normal_style,
+        )
+    )
+
+    if result["memory_completed"]:
+        weighting_text = (
+            "50% semantic fluency, 30% Cookie Theft, "
+            "20% memory-derived score"
+        )
+    else:
+        weighting_text = (
+            "60% semantic fluency, 40% Cookie Theft"
+        )
+
+    table_data = [
+        ["Component", "Score", "Weight"],
+        [
+            "Semantic fluency",
+            f"{result['fluency_percent']:.1f}%",
+            f"{result['weighting']['fluency'] * 100:.0f}%",
+        ],
+        [
+            "Cookie Theft",
+            f"{result['cookie_percent']:.1f}%",
+            f"{result['weighting']['cookie'] * 100:.0f}%",
+        ],
+    ]
+
+    if result["memory_completed"]:
+        table_data.append(
+            [
+                "Memory-derived score",
+                f"{result['memory_percent']:.1f}%",
+                f"{result['weighting']['memory'] * 100:.0f}%",
+            ]
+        )
+    else:
+        table_data.append(
+            [
+                "Memory challenge",
+                "Not completed",
+                "Not included",
+            ]
+        )
+
+    score_table = Table(
+        table_data,
+        colWidths=[
+            2.45 * inch,
+            1.35 * inch,
+            1.25 * inch,
+        ],
+    )
+
+    score_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    colors.HexColor("#1E293B"),
+                ),
+                (
+                    "TEXTCOLOR",
+                    (0, 0),
+                    (-1, 0),
+                    colors.white,
+                ),
+                (
+                    "FONTNAME",
+                    (0, 0),
+                    (-1, 0),
+                    "Helvetica-Bold",
+                ),
+                (
+                    "FONTNAME",
+                    (0, 1),
+                    (0, -1),
+                    "Helvetica-Bold",
+                ),
+                (
+                    "GRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.5,
+                    colors.HexColor("#CBD5E1"),
+                ),
+                (
+                    "BACKGROUND",
+                    (0, 1),
+                    (-1, -1),
+                    colors.HexColor("#F8FAFC"),
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7,
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7,
+                ),
+            ]
+        )
+    )
+
+    story.append(Spacer(1, 0.10 * inch))
+    story.append(score_table)
+    story.append(Spacer(1, 0.10 * inch))
+
+    story.append(
+        Paragraph(
+            f"<b>Weighting used:</b> {weighting_text}.",
+            normal_style,
+        )
+    )
+
+    memory_result = result.get("memory_result")
+
+    if result["memory_completed"] and isinstance(
+        memory_result,
+        dict,
+    ):
+        story.append(Spacer(1, 0.18 * inch))
+        story.append(
+            Paragraph(
+                "Optional Memory Challenge",
+                heading_style,
+            )
+        )
+        story.append(Spacer(1, 0.08 * inch))
+
+        correct_count = memory_result.get(
+            "correct_count",
+            0,
+        )
+        total_words = memory_result.get(
+            "total_words",
+            10,
+        )
+        recall_percent = memory_result.get(
+            "recall_percent",
+            0,
+        )
+        repetitions = memory_result.get(
+            "repetitions",
+            0,
+        )
+        intrusions = memory_result.get(
+            "intrusions",
+            [],
+        )
+
+        if not isinstance(intrusions, (list, tuple)):
+            intrusions = []
+
+        memory_table_data = [
+            ["Memory metric", "Result"],
+            [
+                "Correct recall",
+                f"{correct_count}/{total_words}",
+            ],
+            [
+                "Recall percentage",
+                f"{recall_percent}%",
+            ],
+            [
+                "Repetitions",
+                str(repetitions),
+            ],
+            [
+                "Intrusions",
+                str(len(intrusions)),
+            ],
+        ]
+
+        memory_table = Table(
+            memory_table_data,
+            colWidths=[
+                2.45 * inch,
+                2.60 * inch,
+            ],
+        )
+
+        memory_table.setStyle(
+            TableStyle(
+                [
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        colors.HexColor("#1E293B"),
+                    ),
+                    (
+                        "TEXTCOLOR",
+                        (0, 0),
+                        (-1, 0),
+                        colors.white,
+                    ),
+                    (
+                        "FONTNAME",
+                        (0, 0),
+                        (-1, 0),
+                        "Helvetica-Bold",
+                    ),
+                    (
+                        "FONTNAME",
+                        (0, 1),
+                        (0, -1),
+                        "Helvetica-Bold",
+                    ),
+                    (
+                        "GRID",
+                        (0, 0),
+                        (-1, -1),
+                        0.5,
+                        colors.HexColor("#CBD5E1"),
+                    ),
+                    (
+                        "BACKGROUND",
+                        (0, 1),
+                        (-1, -1),
+                        colors.HexColor("#F8FAFC"),
+                    ),
+                    (
+                        "VALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "MIDDLE",
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        7,
+                    ),
+                    (
+                        "RIGHTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        7,
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        7,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        7,
+                    ),
+                ]
+            )
+        )
+
+        story.append(memory_table)
+
+        if intrusions:
+            escaped_intrusions = ", ".join(
+                str(word)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                for word in intrusions
+            )
+
+            story.append(Spacer(1, 0.08 * inch))
+            story.append(
+                Paragraph(
+                    (
+                        "<b>Intrusion words:</b> "
+                        f"{escaped_intrusions}"
+                    ),
+                    normal_style,
+                )
+            )
+
+    story.append(Spacer(1, 0.16 * inch))
+    story.append(
+        Paragraph(
+            (
+                "<b>Important:</b> This custom score is experimental. "
+                "It is not a diagnosis or a clinically validated "
+                "probability that a person has Alzheimer's disease."
+            ),
+            normal_style,
+        )
+    )
+
+
+
 # NEUROVOICE_MEMORY_RESULTS_ROUTE
 # Returning from the optional memory task must preserve the completed
 # speech assessment and open the final-results phase instead of Step 1.
@@ -657,6 +1439,10 @@ def create_results_pdf(
             )
         )
 
+
+    # NEUROVOICE_OVERALL_WEIGHTING_PDF
+    _nv_append_overall_to_pdf(story, styles)
+
     document.build(story)
 
     pdf_bytes = buffer.getvalue()
@@ -1150,6 +1936,9 @@ elif stage == "results":
         cookie_transcript=st.session_state.cookie_transcript,
         fluency_transcript=st.session_state.fluency_transcript,
     )
+
+    # NEUROVOICE_OVERALL_WEIGHTING_RESULTS
+    _nv_render_overall_results()
 
     st.download_button(
         label="Download PDF report",
