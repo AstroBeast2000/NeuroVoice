@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 import subprocess
 import sys
@@ -158,7 +158,7 @@ def transcribe_with_subprocess(
         capture_output=True,
         text=True,
         check=False,
-        timeout=300,
+        timeout=int(os.environ.get("WHISPER_TIMEOUT_SECONDS", "1200")),
     )
 
     if result.returncode != 0:
