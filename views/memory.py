@@ -1,439 +1,343 @@
-﻿import html
+import html
 import random
 import re
 import time
-from collections import Counter
+from typing import Dict, List, Set
 
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ImportError:
+    st_autorefresh = None
 
 
 # ============================================================
-# CONFIGURATION
+# PAGE CONFIGURATION
 # ============================================================
 
-WORD_DISPLAY_SECONDS = 30
+st.set_page_config(
+    page_title="Memory Challenge | NeuroVoice",
+    page_icon="🧠",
+    layout="wide",
+)
+
+
+# ============================================================
+# CONSTANTS
+# ============================================================
+
+STUDY_SECONDS = 30
 DISTRACTION_SECONDS = 30
 
-WORD_BANKS = [
+WORD_BANKS: List[List[str]] = [
     [
-        "apple",
-        "river",
-        "chair",
-        "candle",
-        "garden",
-        "button",
-        "horse",
-        "window",
-        "pencil",
-        "letter",
+        "Notebook",
+        "Donkey",
+        "Peach",
+        "Wallet",
+        "Picture",
+        "Stream",
+        "Bench",
+        "Lamp",
+        "Valley",
+        "Bucket",
     ],
     [
-        "orange",
-        "bridge",
-        "table",
-        "lantern",
-        "forest",
-        "pocket",
-        "rabbit",
-        "mirror",
-        "crayon",
-        "basket",
+        "Garden",
+        "Pencil",
+        "Window",
+        "Rabbit",
+        "Orange",
+        "Bridge",
+        "Jacket",
+        "Candle",
+        "Forest",
+        "Bottle",
     ],
     [
-        "banana",
-        "ocean",
-        "couch",
-        "torch",
-        "meadow",
-        "jacket",
-        "turtle",
-        "curtain",
-        "marker",
-        "bottle",
-    ],
-    [
-        "peach",
-        "stream",
-        "bench",
-        "lamp",
-        "valley",
-        "wallet",
-        "donkey",
-        "picture",
-        "notebook",
-        "bucket",
+        "Blanket",
+        "Horse",
+        "Cherry",
+        "Camera",
+        "River",
+        "Chair",
+        "Mirror",
+        "Mountain",
+        "Basket",
+        "Clock",
     ],
 ]
 
-# Safe positions that remain scattered while preventing overlap.
-SCATTER_POSITIONS = [
-    (6, 8),
-    (39, 5),
-    (70, 10),
-    (20, 28),
-    (55, 26),
-    (80, 39),
-    (5, 51),
-    (38, 55),
-    (67, 64),
-    (23, 75),
-    (51, 79),
-    (78, 78),
+WORD_POSITIONS = [
+    (8, 12),
+    (38, 8),
+    (70, 13),
+    (20, 34),
+    (53, 31),
+    (80, 42),
+    (7, 60),
+    (36, 64),
+    (66, 70),
+    (22, 82),
 ]
 
-SHAPES = [
-    "●",
-    "■",
-    "▲",
-    "◆",
-    "★",
-    "⬟",
-]
-
-SHAPE_NAMES = {
-    "●": "circle",
-    "■": "square",
-    "▲": "triangle",
-    "◆": "diamond",
-    "★": "star",
-    "⬟": "hexagon",
-}
+SHAPES = ["●", "■", "▲", "◆", "★", "⬟"]
 
 
 # ============================================================
-# SESSION STATE
-# ============================================================
-
-DEFAULT_STATE = {
-    "memory_stage": "choice",
-    "memory_words": [],
-    "memory_positions": [],
-    "memory_study_started_at": None,
-    "memory_distraction_started_at": None,
-    "memory_recall_started_at": None,
-    "memory_shape_left": None,
-    "memory_shape_right": None,
-    "memory_shape_answer": None,
-    "memory_distraction_attempts": 0,
-    "memory_distraction_correct": 0,
-    "memory_result": None,
-    "memory_choice_complete": False,
-    "memory_task_completed": False,
-}
-
-for key, default_value in DEFAULT_STATE.items():
-    if key not in st.session_state:
-        st.session_state[key] = default_value
-
-
-# ============================================================
-# PAGE STYLING
+# STYLING
 # ============================================================
 
 st.markdown(
     """
     <style>
+    .stApp {
+        background:
+            radial-gradient(
+                circle at 10% 10%,
+                rgba(38, 114, 255, 0.10),
+                transparent 30%
+            ),
+            radial-gradient(
+                circle at 90% 20%,
+                rgba(117, 78, 255, 0.08),
+                transparent 28%
+            ),
+            #f7f9fc;
+    }
+
+    [data-testid="stSidebar"] {
+        background: #ffffff;
+        border-right: 1px solid #e8edf5;
+    }
+
     .block-container {
-        max-width: 1050px;
-        padding-top: 2rem;
+        max-width: 1120px;
+        padding-top: 2.2rem;
         padding-bottom: 4rem;
     }
 
-    .nv-memory-hero {
-        padding: 2rem;
-        border: 1px solid rgba(110, 231, 217, 0.24);
-        border-radius: 24px;
-        background:
-            radial-gradient(
-                circle at top right,
-                rgba(73, 214, 204, 0.13),
-                transparent 38%
-            ),
-            linear-gradient(
-                145deg,
-                rgba(37, 63, 89, 0.18),
-                rgba(21, 33, 48, 0.08)
-            );
-        margin-bottom: 1.35rem;
-    }
-
-    .nv-memory-kicker {
-        color: #55d9cc;
-        font-size: 0.82rem;
+    .nv-kicker {
+        color: #3267d6;
+        font-size: 0.84rem;
         font-weight: 800;
         letter-spacing: 0.12em;
+        margin-bottom: 0.4rem;
         text-transform: uppercase;
-        margin-bottom: 0.55rem;
     }
 
-    .nv-memory-title {
-        font-size: clamp(2rem, 5vw, 3.25rem);
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        line-height: 1.05;
+    .nv-title {
+        color: #15223b;
+        font-size: clamp(2.2rem, 5vw, 4rem);
+        font-weight: 850;
+        letter-spacing: -0.045em;
+        line-height: 1.03;
         margin: 0;
     }
 
-    .nv-memory-subtitle {
-        margin-top: 0.8rem;
-        max-width: 760px;
-        font-size: 1.05rem;
+    .nv-subtitle {
+        color: #5d6a80;
+        font-size: 1.08rem;
         line-height: 1.65;
-        opacity: 0.82;
+        margin-top: 1rem;
+        max-width: 760px;
     }
 
-    .nv-step-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.8rem;
-        margin: 1.25rem 0;
+    .nv-card {
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid #e4eaf3;
+        border-radius: 24px;
+        box-shadow: 0 16px 45px rgba(28, 48, 84, 0.08);
+        margin-top: 1.5rem;
+        padding: 1.6rem;
     }
 
-    .nv-step-card {
-        padding: 1rem;
-        border-radius: 16px;
-        border: 1px solid rgba(125, 160, 190, 0.19);
-        background: rgba(80, 115, 145, 0.07);
-    }
-
-    .nv-step-number {
-        width: 30px;
-        height: 30px;
-        border-radius: 999px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(76, 220, 207, 0.16);
-        color: #55d9cc;
+    .nv-section-title {
+        color: #17243d;
+        font-size: 1.45rem;
         font-weight: 800;
-        margin-bottom: 0.55rem;
+        margin-bottom: 0.35rem;
     }
 
-    .nv-step-title {
-        font-weight: 750;
-        margin-bottom: 0.25rem;
+    .nv-section-copy {
+        color: #68758b;
+        font-size: 1rem;
+        line-height: 1.55;
     }
 
-    .nv-step-description {
-        font-size: 0.9rem;
-        opacity: 0.72;
-        line-height: 1.45;
-    }
-
-    .nv-timer-panel {
-        padding: 1.1rem 1.25rem;
-        border-radius: 18px;
-        border: 1px solid rgba(76, 220, 207, 0.25);
-        background: rgba(76, 220, 207, 0.075);
-        margin-bottom: 1rem;
-    }
-
-    .nv-timer-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
+    .nv-timer {
         align-items: center;
-    }
-
-    .nv-timer-label {
-        font-weight: 700;
-    }
-
-    .nv-timer-value {
-        color: #55d9cc;
-        font-size: 1.5rem;
-        font-weight: 850;
-        font-variant-numeric: tabular-nums;
+        background: #edf3ff;
+        border: 1px solid #d6e3ff;
+        border-radius: 999px;
+        color: #285fc5;
+        display: inline-flex;
+        font-size: 1rem;
+        font-weight: 800;
+        gap: 0.45rem;
+        margin-top: 1rem;
+        padding: 0.55rem 0.95rem;
     }
 
     .nv-word-board {
+        background:
+            linear-gradient(
+                145deg,
+                rgba(245, 248, 255, 0.98),
+                rgba(255, 255, 255, 0.98)
+            );
+        border: 1px solid #dfe7f3;
+        border-radius: 24px;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+        height: 510px;
+        margin-top: 1.25rem;
+        overflow: hidden;
         position: relative;
         width: 100%;
-        height: 570px;
-        overflow: hidden;
-        border-radius: 28px;
-        border: 1px solid rgba(110, 231, 217, 0.25);
-        background:
-            radial-gradient(
-                circle at 18% 22%,
-                rgba(94, 234, 212, 0.12),
-                transparent 23%
-            ),
-            radial-gradient(
-                circle at 80% 72%,
-                rgba(96, 165, 250, 0.13),
-                transparent 27%
-            ),
-            linear-gradient(
-                150deg,
-                rgba(15, 35, 49, 0.96),
-                rgba(20, 31, 48, 0.93)
-            );
-        box-shadow:
-            inset 0 0 70px rgba(0, 0, 0, 0.13);
     }
 
-    .nv-board-decoration {
-        position: absolute;
-        border-radius: 999px;
-        border: 1px solid rgba(100, 220, 210, 0.11);
-    }
-
-    .nv-decoration-one {
-        width: 180px;
-        height: 180px;
-        left: -55px;
-        top: -65px;
-    }
-
-    .nv-decoration-two {
-        width: 250px;
-        height: 250px;
-        right: -100px;
-        bottom: -120px;
-    }
-
-    .nv-scattered-word {
-        position: absolute;
-        display: inline-flex;
-        justify-content: center;
+    .nv-word {
         align-items: center;
-        min-width: 105px;
-        padding: 0.7rem 1rem;
+        background: #ffffff;
+        border: 1px solid #dce5f3;
         border-radius: 14px;
-        border: 1px solid rgba(168, 245, 237, 0.30);
-        background: rgba(19, 43, 59, 0.91);
-        color: #ecfffd;
-        font-size: clamp(1.02rem, 2.2vw, 1.36rem);
+        box-shadow: 0 8px 22px rgba(42, 64, 101, 0.10);
+        color: #1c2c48;
+        display: inline-flex;
+        font-size: clamp(0.92rem, 1.8vw, 1.18rem);
         font-weight: 780;
-        letter-spacing: 0.01em;
-        box-shadow:
-            0 9px 26px rgba(0, 0, 0, 0.19),
-            inset 0 1px rgba(255, 255, 255, 0.05);
+        justify-content: center;
+        min-width: 92px;
+        padding: 0.75rem 1rem;
+        position: absolute;
         transform: translate(-50%, -50%);
-        user-select: none;
+        white-space: nowrap;
     }
 
-    .nv-distraction-board {
-        min-height: 390px;
-        border-radius: 26px;
-        border: 1px solid rgba(110, 231, 217, 0.23);
-        background:
-            radial-gradient(
-                circle at 50% 10%,
-                rgba(76, 220, 207, 0.12),
-                transparent 35%
-            ),
-            rgba(26, 42, 57, 0.19);
-        display: flex;
-        flex-direction: column;
+    .nv-shape-area {
         align-items: center;
+        background: linear-gradient(145deg, #f8faff, #ffffff);
+        border: 1px solid #dfe7f3;
+        border-radius: 22px;
+        display: flex;
+        gap: 3rem;
         justify-content: center;
+        margin: 1.4rem 0 1rem;
+        min-height: 245px;
         padding: 2rem;
-        margin-bottom: 1rem;
-    }
-
-    .nv-shape-instruction {
-        text-align: center;
-        font-size: 1.05rem;
-        opacity: 0.8;
-        margin-bottom: 1.3rem;
-    }
-
-    .nv-shape-row {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: clamp(2.2rem, 10vw, 7rem);
-        width: 100%;
     }
 
     .nv-shape {
-        width: clamp(120px, 22vw, 190px);
-        height: clamp(120px, 22vw, 190px);
-        border-radius: 28px;
-        border: 1px solid rgba(137, 242, 231, 0.26);
-        background: rgba(73, 126, 153, 0.10);
-        color: #65dfd2;
-        display: flex;
         align-items: center;
-        justify-content: center;
-        font-size: clamp(4.5rem, 12vw, 8rem);
-        line-height: 1;
-        text-shadow: 0 0 24px rgba(88, 228, 214, 0.22);
-    }
-
-    .nv-versus {
-        font-weight: 850;
-        opacity: 0.4;
-        letter-spacing: 0.12em;
-    }
-
-    .nv-result-panel {
-        padding: 1.5rem;
+        background: #ffffff;
+        border: 1px solid #dfe7f3;
         border-radius: 22px;
-        border: 1px solid rgba(110, 231, 217, 0.22);
-        background: rgba(45, 78, 99, 0.10);
-        margin: 1rem 0;
+        box-shadow: 0 10px 28px rgba(37, 58, 94, 0.10);
+        color: #3767cf;
+        display: flex;
+        font-size: clamp(4rem, 10vw, 7rem);
+        height: 165px;
+        justify-content: center;
+        width: 165px;
     }
 
-    .nv-result-number {
-        color: #59ddd0;
-        font-size: clamp(2.5rem, 8vw, 4.4rem);
+    .nv-stat-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 1.4rem;
+    }
+
+    .nv-stat {
+        background: #f8faff;
+        border: 1px solid #e1e8f3;
+        border-radius: 18px;
+        padding: 1.2rem;
+    }
+
+    .nv-stat-label {
+        color: #6c788c;
+        font-size: 0.83rem;
+        font-weight: 750;
+        text-transform: uppercase;
+    }
+
+    .nv-stat-value {
+        color: #182743;
+        font-size: 2rem;
         font-weight: 850;
-        line-height: 1;
+        margin-top: 0.25rem;
     }
 
-    .nv-word-chip-row {
+    .nv-word-list {
         display: flex;
         flex-wrap: wrap;
         gap: 0.55rem;
-        margin-top: 0.75rem;
+        margin-top: 0.8rem;
     }
 
-    .nv-word-chip {
-        padding: 0.45rem 0.75rem;
+    .nv-chip-good {
+        background: #eaf8ef;
+        border: 1px solid #c5ebd2;
         border-radius: 999px;
-        border: 1px solid rgba(109, 230, 218, 0.22);
-        background: rgba(77, 211, 199, 0.08);
-        font-weight: 650;
-    }
-
-    div[data-testid="stButton"] > button {
-        min-height: 3rem;
-        border-radius: 13px;
+        color: #217642;
         font-weight: 700;
+        padding: 0.45rem 0.75rem;
     }
 
-    div[data-testid="stTextArea"] textarea {
-        min-height: 155px;
-        border-radius: 16px;
-        font-size: 1.05rem;
-        line-height: 1.6;
+    .nv-chip-missed {
+        background: #f3f5f8;
+        border: 1px solid #e0e5ec;
+        border-radius: 999px;
+        color: #6d7786;
+        font-weight: 700;
+        padding: 0.45rem 0.75rem;
     }
 
-    @media (max-width: 700px) {
-        .nv-step-row {
-            grid-template-columns: 1fr;
+    .nv-note {
+        background: #f1f5ff;
+        border-left: 4px solid #4774d9;
+        border-radius: 10px;
+        color: #4e5f7a;
+        line-height: 1.55;
+        margin-top: 1.2rem;
+        padding: 1rem 1.1rem;
+    }
+
+    div.stButton > button {
+        border-radius: 12px;
+        font-weight: 750;
+        min-height: 3rem;
+    }
+
+    @media (max-width: 760px) {
+        .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
         }
 
         .nv-word-board {
-            height: 620px;
+            height: 560px;
         }
 
-        .nv-scattered-word {
-            min-width: 84px;
+        .nv-word {
+            min-width: 74px;
             padding: 0.55rem 0.7rem;
-            font-size: 0.95rem;
         }
 
-        .nv-shape-row {
+        .nv-shape-area {
             gap: 1rem;
         }
 
-        .nv-versus {
-            font-size: 0.8rem;
+        .nv-shape {
+            font-size: 4rem;
+            height: 125px;
+            width: 125px;
+        }
+
+        .nv-stat-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
     </style>
@@ -443,308 +347,202 @@ st.markdown(
 
 
 # ============================================================
-# HELPERS
+# STATE HELPERS
 # ============================================================
 
-def reset_memory_game(go_to_choice: bool = True) -> None:
-    next_stage = "choice" if go_to_choice else "instructions"
+def initialize_state() -> None:
+    defaults = {
+        "memory_phase": "intro",
+        "memory_words": [],
+        "memory_positions": [],
+        "memory_study_started": None,
+        "memory_distraction_started": None,
+        "memory_shape_left": "",
+        "memory_shape_right": "",
+        "memory_shape_same": False,
+        "memory_shape_question": 0,
+        "memory_shape_correct": 0,
+        "memory_shape_total": 0,
+        "memory_shape_answered": False,
+        "memory_recall_text": "",
+        "memory_result": None,
+        "memory_choice_complete": False,
+    }
 
-    st.session_state.memory_stage = next_stage
-    st.session_state.memory_words = []
-    st.session_state.memory_positions = []
-    st.session_state.memory_study_started_at = None
-    st.session_state.memory_distraction_started_at = None
-    st.session_state.memory_recall_started_at = None
-    st.session_state.memory_shape_left = None
-    st.session_state.memory_shape_right = None
-    st.session_state.memory_shape_answer = None
-    st.session_state.memory_distraction_attempts = 0
-    st.session_state.memory_distraction_correct = 0
-    st.session_state.memory_result = None
-    st.session_state.memory_task_completed = False
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
-def start_memory_game() -> None:
-    chosen_words = random.choice(WORD_BANKS).copy()
-    random.shuffle(chosen_words)
+def reset_memory_test() -> None:
+    keys = [
+        "memory_phase",
+        "memory_words",
+        "memory_positions",
+        "memory_study_started",
+        "memory_distraction_started",
+        "memory_shape_left",
+        "memory_shape_right",
+        "memory_shape_same",
+        "memory_shape_question",
+        "memory_shape_correct",
+        "memory_shape_total",
+        "memory_shape_answered",
+        "memory_recall_text",
+        "memory_result",
+        "memory_choice_complete",
+    ]
 
-    positions = random.sample(
-        SCATTER_POSITIONS,
-        len(chosen_words),
-    )
+    for key in keys:
+        st.session_state.pop(key, None)
 
-    st.session_state.memory_words = chosen_words
-    st.session_state.memory_positions = positions
-    st.session_state.memory_stage = "instructions"
-    st.session_state.memory_result = None
-    st.session_state.memory_task_completed = False
+    initialize_state()
 
 
 def begin_study() -> None:
-    st.session_state.memory_study_started_at = time.time()
-    st.session_state.memory_stage = "study"
+    words = random.choice(WORD_BANKS).copy()
+    positions = WORD_POSITIONS.copy()
+
+    random.shuffle(words)
+    random.shuffle(positions)
+
+    st.session_state.memory_words = words
+    st.session_state.memory_positions = positions
+    st.session_state.memory_study_started = time.time()
+    st.session_state.memory_phase = "study"
 
 
 def create_shape_question() -> None:
     left_shape = random.choice(SHAPES)
+    same = random.choice([True, False])
 
-    should_match = random.random() < 0.5
-
-    if should_match:
+    if same:
         right_shape = left_shape
     else:
         right_shape = random.choice(
-            [
-                shape
-                for shape in SHAPES
-                if shape != left_shape
-            ]
+            [shape for shape in SHAPES if shape != left_shape]
         )
 
     st.session_state.memory_shape_left = left_shape
     st.session_state.memory_shape_right = right_shape
-    st.session_state.memory_shape_answer = should_match
+    st.session_state.memory_shape_same = same
+    st.session_state.memory_shape_question += 1
+    st.session_state.memory_shape_answered = False
 
 
 def begin_distraction() -> None:
-    st.session_state.memory_distraction_started_at = time.time()
-    st.session_state.memory_stage = "distraction"
+    st.session_state.memory_phase = "distraction"
+    st.session_state.memory_distraction_started = time.time()
+    st.session_state.memory_shape_correct = 0
+    st.session_state.memory_shape_total = 0
+    st.session_state.memory_shape_question = 0
     create_shape_question()
 
 
-def answer_shape(user_says_same: bool) -> None:
-    correct_answer = bool(
-        st.session_state.memory_shape_answer
-    )
+def submit_shape_answer(answer_same: bool) -> None:
+    if st.session_state.memory_shape_answered:
+        return
 
-    st.session_state.memory_distraction_attempts += 1
+    st.session_state.memory_shape_answered = True
+    st.session_state.memory_shape_total += 1
 
-    if user_says_same == correct_answer:
-        st.session_state.memory_distraction_correct += 1
+    if answer_same == st.session_state.memory_shape_same:
+        st.session_state.memory_shape_correct += 1
 
     create_shape_question()
 
 
-def begin_recall() -> None:
-    st.session_state.memory_recall_started_at = time.time()
-    st.session_state.memory_stage = "recall"
+def normalize_word(word: str) -> str:
+    return re.sub(r"[^a-z]", "", word.lower())
 
 
-def normalize_token(token: str) -> str:
-    cleaned = re.sub(
-        r"[^a-z']",
-        "",
-        str(token).lower(),
-    )
+def parse_recalled_words(text: str) -> List[str]:
+    raw_words = re.findall(r"[A-Za-z]+", text)
+    return [
+        normalize_word(word)
+        for word in raw_words
+        if normalize_word(word)
+    ]
 
-    singular_map = {
-        "apples": "apple",
-        "rivers": "river",
-        "chairs": "chair",
-        "candles": "candle",
-        "gardens": "garden",
-        "buttons": "button",
-        "horses": "horse",
-        "windows": "window",
-        "pencils": "pencil",
-        "letters": "letter",
-        "oranges": "orange",
-        "bridges": "bridge",
-        "tables": "table",
-        "lanterns": "lantern",
-        "forests": "forest",
-        "pockets": "pocket",
-        "rabbits": "rabbit",
-        "mirrors": "mirror",
-        "crayons": "crayon",
-        "baskets": "basket",
-        "bananas": "banana",
-        "oceans": "ocean",
-        "couches": "couch",
-        "torches": "torch",
-        "meadows": "meadow",
-        "jackets": "jacket",
-        "turtles": "turtle",
-        "curtains": "curtain",
-        "markers": "marker",
-        "bottles": "bottle",
-        "peaches": "peach",
-        "streams": "stream",
-        "benches": "bench",
-        "lamps": "lamp",
-        "valleys": "valley",
-        "wallets": "wallet",
-        "donkeys": "donkey",
-        "pictures": "picture",
-        "notebooks": "notebook",
-        "buckets": "bucket",
+
+def calculate_results(recall_text: str) -> Dict:
+    target_words = st.session_state.memory_words
+
+    target_map = {
+        normalize_word(word): word
+        for word in target_words
     }
 
-    return singular_map.get(cleaned, cleaned)
+    recalled_sequence = parse_recalled_words(recall_text)
+    recalled_unique: Set[str] = set(recalled_sequence)
 
-
-def score_recall(response_text: str) -> dict:
-    tokens = [
-        normalize_token(token)
-        for token in re.findall(
-            r"[A-Za-z']+",
-            response_text,
-        )
+    correct_normalized = [
+        word
+        for word in target_map
+        if word in recalled_unique
     ]
-
-    tokens = [
-        token
-        for token in tokens
-        if token
-    ]
-
-    token_counts = Counter(tokens)
-
-    targets = list(
-        st.session_state.memory_words
-    )
-
-    target_set = set(targets)
 
     correct_words = [
-        word
-        for word in targets
-        if token_counts[word] > 0
+        target_map[word]
+        for word in correct_normalized
     ]
 
     missed_words = [
-        word
-        for word in targets
-        if token_counts[word] == 0
+        target_map[word]
+        for word in target_map
+        if word not in recalled_unique
     ]
 
-    repeated_words = {
-        word: count - 1
-        for word, count in token_counts.items()
-        if word in target_set and count > 1
-    }
-
-    intrusion_words = [
-        token
-        for token in tokens
-        if token not in target_set
-    ]
-
-    unique_intrusions = list(
-        dict.fromkeys(intrusion_words)
+    intrusions = sorted(
+        {
+            word
+            for word in recalled_unique
+            if word not in target_map
+        }
     )
 
-    recall_seconds = 0.0
+    repetitions = max(
+        0,
+        len(recalled_sequence) - len(recalled_unique),
+    )
 
-    if st.session_state.memory_recall_started_at:
-        recall_seconds = max(
-            0.0,
-            time.time()
-            - st.session_state.memory_recall_started_at,
-        )
+    correct_count = len(correct_words)
+    recall_percent = round(
+        correct_count / len(target_words) * 100
+    )
 
-    result = {
-        "correct_count": len(correct_words),
-        "total_words": len(targets),
+    if correct_count >= 8:
+        descriptive_band = "Strong recall"
+    elif correct_count >= 5:
+        descriptive_band = "Moderate recall"
+    else:
+        descriptive_band = "Low recall"
+
+    return {
+        "correct_count": correct_count,
+        "total_words": len(target_words),
+        "recall_percent": recall_percent,
         "correct_words": correct_words,
         "missed_words": missed_words,
-        "repeated_words": repeated_words,
-        "repetition_count": sum(
-            repeated_words.values()
+        "intrusions": intrusions,
+        "repetitions": repetitions,
+        "descriptive_band": descriptive_band,
+        "distraction_correct": (
+            st.session_state.memory_shape_correct
         ),
-        "intrusion_words": intrusion_words,
-        "unique_intrusions": unique_intrusions,
-        "intrusion_count": len(intrusion_words),
-        "response_text": response_text,
-        "response_tokens": tokens,
-        "recall_seconds": recall_seconds,
-        "distraction_attempts": int(
-            st.session_state.memory_distraction_attempts
-        ),
-        "distraction_correct": int(
-            st.session_state.memory_distraction_correct
+        "distraction_total": (
+            st.session_state.memory_shape_total
         ),
     }
 
-    st.session_state.memory_result = result
-    st.session_state.memory_task_completed = True
-    st.session_state.memory_choice_complete = True
-    st.session_state.memory_stage = "complete"
 
-
-def render_word_board() -> None:
-    word_elements = []
-
-    for word, position in zip(
-        st.session_state.memory_words,
-        st.session_state.memory_positions,
-    ):
-        x_position, y_position = position
-
-        safe_word = html.escape(
-            word.title()
+def auto_refresh(key: str) -> None:
+    if st_autorefresh is not None:
+        st_autorefresh(
+            interval=1000,
+            limit=None,
+            key=key,
         )
-
-        word_elements.append(
-            f"""
-            <div
-                class="nv-scattered-word"
-                style="
-                    left: {x_position}%;
-                    top: {y_position}%;
-                "
-            >
-                {safe_word}
-            </div>
-            """
-        )
-
-    board_html = f"""
-    <div class="nv-word-board">
-        <div
-            class="
-                nv-board-decoration
-                nv-decoration-one
-            "
-        ></div>
-
-        <div
-            class="
-                nv-board-decoration
-                nv-decoration-two
-            "
-        ></div>
-
-        {''.join(word_elements)}
-    </div>
-    """
-
-    st.markdown(
-        board_html,
-        unsafe_allow_html=True,
-    )
-
-
-def render_chips(words: list[str]) -> str:
-    if not words:
-        return (
-            '<span style="opacity:0.7;">None</span>'
-        )
-
-    chips = "".join(
-        (
-            '<span class="nv-word-chip">'
-            + html.escape(word.title())
-            + "</span>"
-        )
-        for word in words
-    )
-
-    return (
-        '<div class="nv-word-chip-row">'
-        + chips
-        + "</div>"
-    )
 
 
 # ============================================================
@@ -753,281 +551,177 @@ def render_chips(words: list[str]) -> str:
 
 st.markdown(
     """
-    <section class="nv-memory-hero">
-        <div class="nv-memory-kicker">
-            Optional cognitive activity
-        </div>
-
-        <h1 class="nv-memory-title">
-            Memory Challenge
-        </h1>
-
-        <div class="nv-memory-subtitle">
-            Study ten scattered words, complete a quick visual
-            attention game, and then recall as many words as you can.
-            The activity takes about two minutes.
-        </div>
-    </section>
+    <div class="nv-kicker">Optional cognitive activity</div>
+    <h1 class="nv-title">Memory Challenge</h1>
+    <div class="nv-subtitle">
+        Study ten words, complete a brief visual-attention
+        activity, and then recall as many of the original words
+        as possible. This activity takes about two minutes.
+    </div>
     """,
     unsafe_allow_html=True,
 )
 
+initialize_state()
+
 
 # ============================================================
-# CHOICE SCREEN
+# INTRO PHASE
 # ============================================================
 
-if st.session_state.memory_stage == "choice":
-    st.success(
-        "Your two main speech activities are complete."
-    )
-
+if st.session_state.memory_phase == "intro":
     st.markdown(
         """
-        <div class="nv-step-row">
-            <div class="nv-step-card">
-                <div class="nv-step-number">1</div>
-                <div class="nv-step-title">
-                    Study
-                </div>
-                <div class="nv-step-description">
-                    Ten words appear in different locations for
-                    30 seconds.
-                </div>
+        <div class="nv-card">
+            <div class="nv-section-title">Before you begin</div>
+            <div class="nv-section-copy">
+                Ten words will appear in different locations for
+                30 seconds. Study the words themselves; their
+                locations do not matter. Afterward, you will
+                complete a short visual task before recalling
+                the words.
             </div>
-
-            <div class="nv-step-card">
-                <div class="nv-step-number">2</div>
-                <div class="nv-step-title">
-                    Focus
-                </div>
-                <div class="nv-step-description">
-                    Complete a fast 30-second visual matching game.
-                </div>
-            </div>
-
-            <div class="nv-step-card">
-                <div class="nv-step-number">3</div>
-                <div class="nv-step-title">
-                    Recall
-                </div>
-                <div class="nv-step-description">
-                    Enter every word that you remember in any order.
-                </div>
+            <div class="nv-note">
+                Do not write the words down or take a screenshot.
+                The activity is intended to measure unaided recall.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.info(
-        "You can complete the optional memory activity or continue "
-        "directly to your existing speech-model results."
-    )
+    left, right = st.columns([1, 1])
 
-    memory_column, results_column = st.columns(2)
-
-    with memory_column:
+    with left:
         if st.button(
-            "Start Optional Memory Challenge",
-            type="primary",
-            use_container_width=True,
-        ):
-            start_memory_game()
-            st.rerun()
-
-    with results_column:
-        if st.button(
-            "View Results Now",
-            use_container_width=True,
-        ):
-            st.session_state.memory_choice_complete = True
-            st.session_state.memory_task_completed = False
-
-            try:
-                st.switch_page("views/test.py")
-            except Exception:
-                st.query_params["show_results"] = "1"
-                st.rerun()
-
-
-# ============================================================
-# INSTRUCTION SCREEN
-# ============================================================
-
-elif st.session_state.memory_stage == "instructions":
-    st.subheader("Before you begin")
-
-    st.markdown(
-        """
-        Ten everyday words will be scattered across the next screen.
-
-        - You will have **30 seconds** to study them.
-        - The words will remain in fixed positions.
-        - Do not write them down or take a screenshot.
-        - The words disappear automatically.
-        - You will then complete a **30-second visual game**.
-        - After the visual game, enter every word you remember.
-        - Word order and screen location do not matter.
-        """
-    )
-
-    st.warning(
-        "The study screen cannot be reopened after the words disappear."
-    )
-
-    first_column, second_column = st.columns([2, 1])
-
-    with first_column:
-        if st.button(
-            "I Am Ready — Show the Words",
+            "Begin memory challenge",
             type="primary",
             use_container_width=True,
         ):
             begin_study()
             st.rerun()
 
-    with second_column:
+    with right:
         if st.button(
-            "Cancel",
+            "Skip optional activity",
             use_container_width=True,
         ):
-            reset_memory_game(go_to_choice=True)
-            st.rerun()
+            st.session_state.memory_choice_complete = True
+            st.session_state.memory_result = None
+
+            try:
+                st.switch_page("views/test.py")
+            except Exception:
+                st.info(
+                    "The optional activity was skipped. "
+                    "Use the Take Test page to view your results."
+                )
 
 
 # ============================================================
-# STUDY SCREEN
+# STUDY PHASE
 # ============================================================
 
-elif st.session_state.memory_stage == "study":
-    if not st.session_state.memory_study_started_at:
-        begin_study()
-        st.rerun()
+elif st.session_state.memory_phase == "study":
+    auto_refresh("memory_study_refresh")
 
-    elapsed_seconds = (
-        time.time()
-        - st.session_state.memory_study_started_at
-    )
-
-    remaining_seconds = max(
+    elapsed = time.time() - st.session_state.memory_study_started
+    remaining = max(
         0,
-        WORD_DISPLAY_SECONDS - int(elapsed_seconds),
+        STUDY_SECONDS - int(elapsed),
     )
 
-    if remaining_seconds <= 0:
+    if remaining <= 0:
         begin_distraction()
         st.rerun()
 
-    st_autorefresh(
-        interval=500,
-        limit=None,
-        key="memory_study_refresh",
-    )
-
-    progress_value = min(
-        1.0,
-        elapsed_seconds / WORD_DISPLAY_SECONDS,
-    )
-
     st.markdown(
         f"""
-        <div class="nv-timer-panel">
-            <div class="nv-timer-row">
-                <div>
-                    <div class="nv-timer-label">
-                        Study every word
-                    </div>
-                    <div style="opacity:0.7;">
-                        Their locations do not matter.
-                    </div>
-                </div>
-
-                <div class="nv-timer-value">
-                    {remaining_seconds}s
-                </div>
+        <div class="nv-card">
+            <div class="nv-section-title">Study every word</div>
+            <div class="nv-section-copy">
+                Focus on remembering the words. Their locations
+                do not matter.
+            </div>
+            <div class="nv-timer">
+                Time remaining: {remaining} seconds
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.progress(progress_value)
+    word_html = []
 
-    render_word_board()
+    for word, position in zip(
+        st.session_state.memory_words,
+        st.session_state.memory_positions,
+    ):
+        left, top = position
+
+        word_html.append(
+            (
+                '<div class="nv-word" '
+                f'style="left:{left}%; top:{top}%;">'
+                f'{html.escape(word)}'
+                "</div>"
+            )
+        )
+
+    board_html = (
+        '<div class="nv-word-board">'
+        + "".join(word_html)
+        + "</div>"
+    )
+
+    st.markdown(
+        board_html,
+        unsafe_allow_html=True,
+    )
 
     st.caption(
-        "The words will disappear automatically when the timer reaches zero."
+        "The words will disappear automatically when the timer "
+        "reaches zero."
     )
 
 
 # ============================================================
-# DISTRACTION SCREEN
+# DISTRACTION PHASE
 # ============================================================
 
-elif st.session_state.memory_stage == "distraction":
-    if not st.session_state.memory_distraction_started_at:
-        begin_distraction()
-        st.rerun()
+elif st.session_state.memory_phase == "distraction":
+    auto_refresh("memory_distraction_refresh")
 
-    elapsed_seconds = (
+    elapsed = (
         time.time()
-        - st.session_state.memory_distraction_started_at
+        - st.session_state.memory_distraction_started
     )
 
-    remaining_seconds = max(
+    remaining = max(
         0,
-        DISTRACTION_SECONDS - int(elapsed_seconds),
+        DISTRACTION_SECONDS - int(elapsed),
     )
 
-    if remaining_seconds <= 0:
-        begin_recall()
+    if remaining <= 0:
+        st.session_state.memory_phase = "recall"
         st.rerun()
-
-    if (
-        st.session_state.memory_shape_left is None
-        or st.session_state.memory_shape_right is None
-    ):
-        create_shape_question()
-        st.rerun()
-
-    st_autorefresh(
-        interval=500,
-        limit=None,
-        key="memory_distraction_refresh",
-    )
-
-    attempts = int(
-        st.session_state.memory_distraction_attempts
-    )
 
     st.markdown(
         f"""
-        <div class="nv-timer-panel">
-            <div class="nv-timer-row">
-                <div>
-                    <div class="nv-timer-label">
-                        Visual Focus Challenge
-                    </div>
-                    <div style="opacity:0.7;">
-                        Decide whether the two shapes match.
-                    </div>
-                </div>
-
-                <div class="nv-timer-value">
-                    {remaining_seconds}s
-                </div>
+        <div class="nv-card">
+            <div class="nv-section-title">
+                Visual attention activity
+            </div>
+            <div class="nv-section-copy">
+                Decide whether the two shapes are the same or
+                different.
+            </div>
+            <div class="nv-timer">
+                Time remaining: {remaining} seconds
             </div>
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
-    st.progress(
-        min(
-            1.0,
-            elapsed_seconds / DISTRACTION_SECONDS,
-        )
     )
 
     left_shape = html.escape(
@@ -1040,38 +734,9 @@ elif st.session_state.memory_stage == "distraction":
 
     st.markdown(
         f"""
-        <div class="nv-distraction-board">
-            <div class="nv-shape-instruction">
-                Are these shapes the same or different?
-            </div>
-
-            <div class="nv-shape-row">
-                <div
-                    class="nv-shape"
-                    aria-label="{html.escape(
-                        SHAPE_NAMES[
-                            st.session_state.memory_shape_left
-                        ]
-                    )}"
-                >
-                    {left_shape}
-                </div>
-
-                <div class="nv-versus">
-                    VS
-                </div>
-
-                <div
-                    class="nv-shape"
-                    aria-label="{html.escape(
-                        SHAPE_NAMES[
-                            st.session_state.memory_shape_right
-                        ]
-                    )}"
-                >
-                    {right_shape}
-                </div>
-            </div>
+        <div class="nv-shape-area">
+            <div class="nv-shape">{left_shape}</div>
+            <div class="nv-shape">{right_shape}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1081,221 +746,221 @@ elif st.session_state.memory_stage == "distraction":
 
     with same_column:
         if st.button(
-            "Same Shape",
+            "Same",
             type="primary",
             use_container_width=True,
         ):
-            answer_shape(True)
+            submit_shape_answer(True)
             st.rerun()
 
     with different_column:
         if st.button(
-            "Different Shapes",
+            "Different",
             use_container_width=True,
         ):
-            answer_shape(False)
+            submit_shape_answer(False)
             st.rerun()
 
     st.caption(
-        f"Questions answered: {attempts} · Keep going until time expires."
+        "Responses completed: "
+        f"{st.session_state.memory_shape_total}"
     )
 
 
 # ============================================================
-# RECALL SCREEN
+# RECALL PHASE
 # ============================================================
 
-elif st.session_state.memory_stage == "recall":
-    st.success(
-        "The attention activity is complete."
-    )
-
-    st.subheader("Which words do you remember?")
-
-    st.write(
-        "Enter every word you remember from the scattered-word screen. "
-        "Use spaces, commas, or separate lines. Order does not matter."
-    )
-
-    recall_response = st.text_area(
-        "Remembered words",
-        key="memory_recall_response",
-        placeholder=(
-            "Type the remembered words here..."
-        ),
-        height=180,
-    )
-
-    st.caption(
-        "Do not guess based on the distraction-game shapes. "
-        "Only enter words from the original study screen."
-    )
-
-    submit_column, restart_column = st.columns([2, 1])
-
-    with submit_column:
-        if st.button(
-            "Submit Memory Response",
-            type="primary",
-            use_container_width=True,
-        ):
-            if not recall_response.strip():
-                st.error(
-                    "Enter at least one remembered word before submitting."
-                )
-            else:
-                score_recall(recall_response)
-                st.rerun()
-
-    with restart_column:
-        if st.button(
-            "Restart Memory Game",
-            use_container_width=True,
-        ):
-            reset_memory_game(go_to_choice=False)
-
-            if "memory_recall_response" in st.session_state:
-                del st.session_state[
-                    "memory_recall_response"
-                ]
-
-            start_memory_game()
-            st.rerun()
-
-
-# ============================================================
-# COMPLETION SCREEN
-# ============================================================
-
-elif st.session_state.memory_stage == "complete":
-    result = st.session_state.memory_result
-
-    if not result:
-        reset_memory_game(go_to_choice=True)
-        st.rerun()
-
-    st.success(
-        "Memory challenge complete."
-    )
-
-    correct_count = int(
-        result["correct_count"]
-    )
-
-    total_words = int(
-        result["total_words"]
-    )
-
+elif st.session_state.memory_phase == "recall":
     st.markdown(
-        f"""
-        <div class="nv-result-panel">
-            <div style="opacity:0.72; font-weight:700;">
-                Words correctly recalled
+        """
+        <div class="nv-card">
+            <div class="nv-section-title">
+                Recall the original words
             </div>
-
-            <div class="nv-result-number">
-                {correct_count} of {total_words}
+            <div class="nv-section-copy">
+                Enter every word you remember from the original
+                list. Separate words with spaces, commas, or new
+                lines. Do not guess based on the visual shapes.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    first_metric, second_metric, third_metric = st.columns(3)
-
-    with first_metric:
-        st.metric(
-            "Correct words",
-            correct_count,
-        )
-
-    with second_metric:
-        st.metric(
-            "Repeated entries",
-            int(result["repetition_count"]),
-        )
-
-    with third_metric:
-        st.metric(
-            "Non-list entries",
-            int(result["intrusion_count"]),
-        )
-
-    with st.expander(
-        "Review memory activity details",
-        expanded=False,
-    ):
-        st.markdown("**Correctly recalled**")
-
-        st.markdown(
-            render_chips(
-                result["correct_words"]
-            ),
-            unsafe_allow_html=True,
-        )
-
-        st.markdown("**Words not recalled**")
-
-        st.markdown(
-            render_chips(
-                result["missed_words"]
-            ),
-            unsafe_allow_html=True,
-        )
-
-        if result["unique_intrusions"]:
-            st.markdown("**Non-list words entered**")
-
-            st.markdown(
-                render_chips(
-                    result["unique_intrusions"]
-                ),
-                unsafe_allow_html=True,
-            )
-
-        st.write(
-            "**Visual-game questions answered:** "
-            f"{result['distraction_attempts']}"
-        )
-
-        st.write(
-            "**Visual-game correct answers:** "
-            f"{result['distraction_correct']}"
-        )
-
-    st.info(
-        "This memory activity is stored as an optional supporting "
-        "measurement. It does not alter the two trained speech-model "
-        "scores."
+    recall_text = st.text_area(
+        "Words you remember",
+        key="memory_recall_text",
+        height=180,
+        placeholder=(
+            "Type all remembered words here..."
+        ),
     )
 
-    results_column, replay_column = st.columns([2, 1])
+    if st.button(
+        "Submit recalled words",
+        type="primary",
+        use_container_width=True,
+    ):
+        if not recall_text.strip():
+            st.warning(
+                "Enter the words you remember before submitting."
+            )
+        else:
+            result = calculate_results(recall_text)
+
+            st.session_state.memory_result = result
+            st.session_state.memory_choice_complete = True
+            st.session_state.memory_phase = "results"
+            st.rerun()
+
+
+# ============================================================
+# RESULTS PHASE
+# ============================================================
+
+elif st.session_state.memory_phase == "results":
+    result = st.session_state.memory_result
+
+    if not result:
+        st.session_state.memory_phase = "intro"
+        st.rerun()
+
+    st.markdown(
+        """
+        <div class="nv-card">
+            <div class="nv-section-title">
+                Memory activity results
+            </div>
+            <div class="nv-section-copy">
+                These values describe performance on this optional
+                activity. They are not a diagnosis.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    stat_html = f"""
+    <div class="nv-stat-grid">
+        <div class="nv-stat">
+            <div class="nv-stat-label">Correct words</div>
+            <div class="nv-stat-value">
+                {result["correct_count"]}/{result["total_words"]}
+            </div>
+        </div>
+        <div class="nv-stat">
+            <div class="nv-stat-label">Recall percentage</div>
+            <div class="nv-stat-value">
+                {result["recall_percent"]}%
+            </div>
+        </div>
+        <div class="nv-stat">
+            <div class="nv-stat-label">Repetitions</div>
+            <div class="nv-stat-value">
+                {result["repetitions"]}
+            </div>
+        </div>
+        <div class="nv-stat">
+            <div class="nv-stat-label">Extra words</div>
+            <div class="nv-stat-value">
+                {len(result["intrusions"])}
+            </div>
+        </div>
+    </div>
+    """
+
+    st.markdown(
+        stat_html,
+        unsafe_allow_html=True,
+    )
+
+    st.subheader(result["descriptive_band"])
+
+    st.markdown("**Correctly recalled**")
+
+    correct_chips = "".join(
+        (
+            '<span class="nv-chip-good">'
+            f'{html.escape(word)}'
+            "</span>"
+        )
+        for word in result["correct_words"]
+    )
+
+    if not correct_chips:
+        correct_chips = (
+            '<span class="nv-chip-missed">None</span>'
+        )
+
+    st.markdown(
+        f'<div class="nv-word-list">{correct_chips}</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("**Missed words**")
+
+    missed_chips = "".join(
+        (
+            '<span class="nv-chip-missed">'
+            f'{html.escape(word)}'
+            "</span>"
+        )
+        for word in result["missed_words"]
+    )
+
+    if not missed_chips:
+        missed_chips = (
+            '<span class="nv-chip-good">None</span>'
+        )
+
+    st.markdown(
+        f'<div class="nv-word-list">{missed_chips}</div>',
+        unsafe_allow_html=True,
+    )
+
+    if result["intrusions"]:
+        st.markdown("**Words not in the original list**")
+        st.write(", ".join(result["intrusions"]))
+
+    if result["distraction_total"] > 0:
+        st.caption(
+            "Visual-task accuracy: "
+            f'{result["distraction_correct"]}/'
+            f'{result["distraction_total"]}'
+        )
+
+    st.markdown(
+        """
+        <div class="nv-note">
+            This optional task provides a descriptive memory
+            measurement. It should not be interpreted as an
+            Alzheimer's probability or clinical conclusion.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    results_column, restart_column = st.columns(2)
 
     with results_column:
         if st.button(
-            "Continue to Full Results",
+            "Continue to full results",
             type="primary",
             use_container_width=True,
         ):
-            st.session_state.memory_choice_complete = True
-            st.session_state.memory_task_completed = True
-
             try:
                 st.switch_page("views/test.py")
             except Exception:
-                st.query_params["show_results"] = "1"
-                st.rerun()
+                st.info(
+                    "Return to the Take Test page to view the "
+                    "combined report."
+                )
 
-    with replay_column:
+    with restart_column:
         if st.button(
-            "Play Again",
+            "Repeat memory activity",
             use_container_width=True,
         ):
-            if "memory_recall_response" in st.session_state:
-                del st.session_state[
-                    "memory_recall_response"
-                ]
-
-            reset_memory_game(go_to_choice=False)
-            start_memory_game()
+            reset_memory_test()
             st.rerun()
