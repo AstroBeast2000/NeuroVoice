@@ -1,0 +1,21 @@
+﻿services:
+  - type: web
+    name: NeuroVoice
+    runtime: python
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: python -m streamlit run app.py --server.address=0.0.0.0 --server.port=$PORT --server.headless=true
+    envVars:
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: NUMEXPR_NUM_THREADS
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
+      - key: WHISPER_MODEL_NAME
+        value: "tiny.en"
+      - key: WHISPER_TIMEOUT_SECONDS
+        value: "240"

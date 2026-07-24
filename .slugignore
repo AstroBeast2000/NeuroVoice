@@ -1,0 +1,11 @@
+﻿venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.ipynb
+.git/
+.gitignore
+NeuroVoice_fusion_patched/
+views/test_before_pdf_report.py
+views/test_before_results_update.py

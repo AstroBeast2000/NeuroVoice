@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 import subprocess
 import sys
@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 
-WHISPER_MODEL_NAME = "tiny.en"
+WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "tiny.en")
 
 
 def normalize_audio(source_path: str, output_path: str) -> None:
@@ -220,3 +220,4 @@ def transcribe_audio_bytes(
         )
 
         return transcript
+
