@@ -963,12 +963,15 @@ elif st.session_state.memory_phase == "results":
             type="primary",
             use_container_width=True,
         ):
+            # NEUROVOICE_RETURN_TO_RESULTS
+            st.session_state["return_to_final_results"] = True
+            st.session_state["memory_choice_complete"] = True
             try:
                 st.switch_page("views/test.py")
             except Exception:
                 st.info(
                     "Return to the Take Test page to view the "
-                    "combined report."
+                    "completed assessment results."
                 )
 
     with restart_column:
