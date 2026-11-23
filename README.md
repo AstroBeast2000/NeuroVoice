@@ -7,6 +7,12 @@
 
 > **Research-use notice:** NeuroVoice is an experimental educational/research prototype. It is not a medical device, diagnostic system, or clinically validated screening tool. Model scores are not probabilities that someone has Alzheimer's disease or another condition. Do not use the application to make health-care decisions.
 
+## Application preview
+
+![NeuroVoice homepage](assets/screenshots/neurovoice-homepage.webp)
+
+The screenshot shows the current application landing page.
+
 ## What the application does
 
 1. Collects a Cookie Theft picture-description recording.
@@ -65,6 +71,12 @@ The current feature extractor counts alphabetic words; it does not independently
 The repository also contains charts and evaluation files from broader experiments. These artifacts must not be confused with performance of the currently deployed Streamlit inference path.
 
 ### Cookie Theft transcript–acoustic fusion experiment
+
+The following confusion matrices show the counts and within-class proportions for this experiment's reported final evaluation. They are descriptive of that evaluation subset and should be interpreted with the post-hoc test-set filtering caveat above.
+
+![Cookie Theft final confusion matrix](assets/screenshots/cookie-theft-confusion-matrix.webp)
+
+![Cookie Theft normalized final confusion matrix](assets/screenshots/cookie-theft-normalized-confusion-matrix.webp)
 
 The file `assets/data/picture/FINAL_evaluation_report.txt` describes a separate transcript–acoustic stacking evaluation. It reports 2,080 training recordings and 371 reviewed test recordings. The report explicitly states that the test subset was filtered after previous model-error inspection; 33 of 404 recordings were removed during quality review. Therefore, these results are **post-hoc diagnostic results**, not an unbiased untouched-test estimate.
 
