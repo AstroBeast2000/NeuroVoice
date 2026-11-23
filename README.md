@@ -94,20 +94,24 @@ Preprocessing work has included participant-only speech extraction where availab
 
 ## Repository layout
 
+The top-level folders use conventional names based on their role. Timestamped development snapshots have been removed from the active project tree; their earlier versions remain available in Git history.
+
 ```text
-.
-├── app.py
-├── views/                 # Streamlit pages
-├── src/                   # Transcription and inference code
-├── models/                # Serialized model artifacts
-├── notebooks/             # Training/research notebooks
-├── assets/
-│   ├── charts/            # Evaluation figures
-│   └── data/              # Permitted derived evaluation artifacts
-├── docs/                  # Model card and architecture notes
-├── tests/                 # Lightweight feature-extraction tests
-├── requirements.txt
-└── render.yaml
+NeuroVoice/
+├── .streamlit/            # Streamlit configuration
+├── assets/                # Research figures and permitted derived data
+├── docs/                  # Model card and architecture documentation
+├── models/                # Trained model artifacts and configuration
+├── notebooks/             # Model-training and research notebooks
+├── src/                   # Transcription, feature extraction, and inference
+├── views/                 # Streamlit application pages
+├── .gitignore             # Local files excluded from Git
+├── .slugignore            # Files excluded from the Render deployment bundle
+├── README.md              # Project overview and setup instructions
+├── app.py                 # Streamlit application entry point
+├── render.yaml            # Render service configuration
+├── render_start.py        # Render startup command
+└── requirements.txt       # Python dependencies
 ```
 
 ## Run locally
