@@ -1,16 +1,8 @@
-import streamlit as st
 from pathlib import Path
+
 import pandas as pd
+import streamlit as st
 
-st.title("Research & Data")
-st.caption(
-    "A research prototype for studying language patterns associated with cognitive impairment. "
-    "This system is not a diagnosis or a medical device."
-)
-
-overview_tab, data_tab, models_tab, results_tab, limits_tab = st.tabs(
-    ["Project Overview", "Datasets", "Models", "Results & Charts", "Limitations"]
-)
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 PICTURE_CHARTS = BASE_DIR / "assets" / "charts" / "picture"
@@ -18,373 +10,239 @@ FLUENCY_CHARTS = BASE_DIR / "assets" / "charts" / "fluency"
 PICTURE_DATA = BASE_DIR / "assets" / "data" / "picture"
 FLUENCY_DATA = BASE_DIR / "assets" / "data" / "fluency"
 
+
+def read_csv_if_present(path: Path):
+    if not path.exists():
+        return None
+    try:
+        return pd.read_csv(path)
+    except (OSError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+        st.warning(f"Could not read {path.name}: {exc}")
+        return None
+
+
+def show_chart(directory: Path, filename: str, title: str, width: int = 760):
+    path = directory / filename
+    if path.exists():
+        st.subheader(title)
+        st.image(str(path), width=width)
+    else:
+        st.caption(f"Figure not available in this checkout: {filename}")
+
+
+st.title("Research & Data")
+st.caption(
+    "Technical documentation and internal evaluation artifacts for an experimental "
+    "speech-and-language research prototype. Not a diagnostic or clinical screening tool."
+)
+
+overview_tab, data_tab, models_tab, results_tab, limits_tab = st.tabs(
+    ["Overview", "Data sources", "Application models", "Evaluation artifacts", "Limitations"]
+)
+
 with overview_tab:
     st.header("Project overview")
     st.write(
         """
-        NeuroVoice analyzes language produced during two established cognitive-language tasks.
-        The **Cookie Theft Picture Description Task** evaluates connected speech, while the
-        **Semantic Verbal Fluency Test** asks participants to name as many animals as possible.
-        These tasks are analyzed separately because they measure different aspects of language
-        and were developed from different datasets.
+        NeuroVoice explores language patterns in two tasks: the Cookie Theft Picture
+        Description Task (connected speech) and Semantic Verbal Fluency (animal naming).
+        Each task has its own feature representation and model. Their outputs are displayed
+        separately; they are not combined into a disease probability.
         """
     )
-
-    st.subheader("Cookie Theft Picture Description Task")
-    st.write(
-        """
-        Participants describe the Cookie Theft picture. The resulting transcript is analyzed
-        using word patterns, character patterns, and engineered linguistic features. These
-        features can reflect vocabulary use, sentence structure, repetition, information
-        content, and other properties of connected speech.
-        """
+    st.graphviz_chart(
+        '''
+        digraph neurovoice {
+          rankdir=TB;
+          node [shape=box, style="rounded,filled", fillcolor="#17243a", fontcolor="white", color="#6d86c9"];
+          audio [label="Audio input"];
+          whisper [label="FFmpeg preparation + Whisper transcription"];
+          cookie [label="Cookie Theft transcript"];
+          fluency [label="Animal-naming transcript"];
+          textmodel [label="Four-component transcript ensemble"];
+          features [label="Four lexical/count features"];
+          cresult [label="Cookie Theft research output"];
+          fresult [label="Fluency research output"];
+          report [label="Separate task results / PDF"];
+          audio -> whisper;
+          whisper -> cookie;
+          whisper -> fluency;
+          cookie -> textmodel -> cresult -> report;
+          fluency -> features -> fresult -> report;
+        }
+        ''',
+        use_container_width=True,
     )
-
-    st.subheader("Semantic Verbal Fluency Test")
-    st.write(
-        """
-        Participants name as many animals as possible during a semantic verbal fluency task.
-        The current model analyzes total responses, unique responses, repetitions, and
-        type-token ratio. The task is labeled by its formal name on the website, while the
-        instructions explain that the participant should name animals.
-        """
-    )
-
     st.info(
-        "The two task scores are not averaged into one disease probability. "
-        "Each result is interpreted only against the threshold selected for that model."
+        "The optional memory activity is separate. It is not included in a weighted "
+        "speech or Alzheimer's screening score."
     )
 
 with data_tab:
-    st.header("Datasets used in the broader project")
+    st.header("Research data sources")
     st.write(
         """
-        The broader research project combines six speech datasets into a unified dataset.
-        The goal is to use participant-only speech whenever possible, preserve diagnosis and
-        demographic metadata, prevent interviewer leakage, and separate subjects between
-        training and testing.
+        The broader research workflow has involved multiple public or access-controlled
+        speech resources. Their use varies by experiment; a dataset mentioned here did not
+        necessarily train every model in the application.
         """
     )
+    sources = [
+        ("ADReSS 2020", "Cookie Theft picture-description recordings and transcripts for AD/control research."),
+        ("ADReSSo 2021", "Speech-based Alzheimer's classification and cognitive-decline research tasks."),
+        ("ADReSS-M", "Multilingual ADReSS extension; project preprocessing included diarization, segmentation, participant-speech extraction, and transcription."),
+        ("Pitt Corpus (DementiaBank)", "Speech and transcripts across several tasks; supplies the AD group in the current fluency experiment."),
+        ("Lu Corpus", "DementiaBank speech resource included in the broader preprocessing workflow."),
+        ("Other TalkBank releases", "Additional participant speech/transcript material used in broader data preparation."),
+        ("Wisconsin Longitudinal Study (WLS)", "Supplies the control group in the current fluency experiment."),
+    ]
+    for name, description in sources:
+        with st.expander(name):
+            st.write(description)
 
-    st.subheader("ADReSS 2020")
-    st.write(
-        """
-        **ADReSS 2020** stands for *Alzheimer's Dementia Recognition through Spontaneous Speech*.
-        It contains Cookie Theft picture-description recordings and transcripts from participants
-        with Alzheimer's disease and cognitively healthy controls.
-
-        The source folders include original recordings and participant-only recordings. This
-        project uses only the participant-only files, such as `S001_PAR.wav`, rather than the
-        original mixed-speaker recordings. This reduces the chance that the model learns features
-        from the interviewer instead of the participant.
-        """
+    st.warning(
+        "The current Semantic Verbal Fluency experiment compares Pitt AD participants with "
+        "WLS controls. Diagnosis and source dataset are linked, creating dataset-source "
+        "confounding that nested cross-validation does not remove."
     )
 
-    st.subheader("ADReSS 2021")
-    st.write(
-        """
-        **ADReSS 2021**, also called **ADReSSo 2021**, extends the ADReSS research challenge.
-        It includes speech-based Alzheimer's disease classification and cognitive-decline
-        prediction tasks.
-
-        This project uses the prepared participant-only audio from the `patient_audio` folder,
-        including files such as `adrso001_PAR_only.wav`. Diagnosis and progression information
-        are kept separate because classification and decline prediction are different research
-        targets.
-        """
-    )
-
-    st.subheader("ADReSS-M")
-    st.write(
-        """
-        **ADReSS-M** is a multilingual extension of the ADReSS family of datasets. Its recordings
-        required a larger preprocessing pipeline before they could be included in the unified
-        dataset.
-
-        The completed processing steps include:
-
-        - loudness normalization;
-        - speaker diarization;
-        - segmentation;
-        - Whisper transcription;
-        - removal of interviewer prompts;
-        - participant-only speech extraction;
-        - organization into consistent audio and transcript folders.
-
-        The final processed structure includes `par_audio`, `par_audio_normalized`,
-        `segmentation`, and `transcripts`. The canonical manifest uses the participant-only
-        audio in `processed_diarized/par_audio`.
-        """
-    )
-
-    st.subheader("Pitt Corpus")
-    st.write(
-        """
-        The **Pitt Corpus** is distributed through DementiaBank. It contains speech and
-        transcripts from participants with dementia and comparison participants across several
-        tasks, including Cookie Theft picture description, verbal fluency, recall, and sentence
-        production.
-
-        Participant-only audio was extracted for this project so interviewer speech is not used
-        as a model input. Pitt contributes a large portion of the Alzheimer's disease examples
-        in the broader dataset.
-        """
-    )
-
-    st.subheader("Lu Corpus")
-    st.write(
-        """
-        The **Lu Corpus** is another DementiaBank source included in the unified project.
-        Participant-only audio has already been extracted into a dedicated
-        `participant_only_audio` folder. This lets the project use the participant's speech
-        without including interviewer prompts or interviewer voice characteristics.
-        """
-    )
-
-    st.subheader("Train/Test TalkBank release")
-    st.write(
-        """
-        The separate **Train/Test TalkBank release** contains short participant-only recordings
-        and transcripts. These samples were already prepared without interviewer speech, so they
-        did not require the same diarization and segmentation pipeline used for some of the other
-        datasets.
-        """
-    )
-
-    st.subheader("Wisconsin Longitudinal Study")
-    st.write(
-        """
-        The **Wisconsin Longitudinal Study**, abbreviated **WLS**, follows Wisconsin high-school
-        graduates across adulthood. In the current Semantic Verbal Fluency Test model, WLS
-        supplies the cognitively healthy comparison group, while the Alzheimer's disease group
-        comes from the Pitt Corpus.
-
-        Because diagnosis and dataset source are linked, this creates an important confounding
-        risk: the model may learn differences between the two studies rather than only differences
-        related to cognition.
-        """
-    )
-
-    st.divider()
-    st.subheader("Quality-reviewed unified dataset")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.metric("Training samples retained", "2,080")
-        st.caption("No training recordings were removed during the reported quality-review pass.")
-    with c2:
-        st.metric("Test samples retained", "371")
-        st.caption("33 of 404 test recordings were removed after manual audio-quality review.")
-
-    st.subheader("Dataset design principles")
-    st.markdown(
-        """
-        - Use participant-only speech whenever available.
-        - Prevent the same subject from appearing in both training and testing.
-        - Preserve diagnosis, age, sex, MMSE, dataset, subject ID, and recording ID when available.
-        - Keep audio and transcripts aligned through a canonical manifest.
-        - Record quality-control decisions instead of silently deleting samples.
-        - Avoid interviewer leakage and dataset-source leakage whenever possible.
-        """
+    st.subheader("ADReSS-M quality-review record")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Training recordings", "2,080")
+    c2.metric("Reviewed test recordings", "371")
+    c3.metric("Excluded from test review", "33")
+    st.caption(
+        "The associated Cookie Theft evaluation report says 33 of 404 test recordings "
+        "were removed after prior model-error inspection. These figures describe a "
+        "post-hoc quality-reviewed subset, not an untouched independent test set."
     )
 
 with models_tab:
-    st.header("Current models")
+    st.header("Models loaded by the current application")
 
-    st.subheader("Cookie Theft Picture Description Task model")
+    st.subheader("Cookie Theft Picture Description")
     st.write(
         """
-        The current picture-description system uses a transcript-and-acoustic
-        fusion model. The transcript and recording are analyzed separately,
-        and their probabilities are combined by a trained stacking classifier.
+        The current application code in `src/cookie_model.py` loads four transcript-only
+        components. Audio is used to generate the transcript; the checked-in application
+        inference path does not load an acoustic classifier.
         """
     )
-
-    st.markdown(
-        """
-        - **Transcript model:** TF-IDF language features with a calibrated
-          linear support vector classifier.
-        - **Acoustic model:** an Extra Trees classifier using 85 handcrafted
-          recording features.
-        - **Fusion model:** logistic regression combining the transcript and
-          acoustic probabilities.
-        """
+    st.table(
+        pd.DataFrame(
+            [
+                ["Word TF-IDF + linear SVM", "Word-level lexical patterns"],
+                ["Character TF-IDF + linear SVM", "Character n-gram patterns"],
+                ["Linguistic logistic regression", "Hand-engineered transcript features"],
+                ["Combined text logistic regression", "Combined word, character, and linguistic representation"],
+            ],
+            columns=["Component", "Role"],
+        )
     )
+    config_path = BASE_DIR / "models" / "cookie" / "validation_selected_configuration.csv"
+    config = read_csv_if_present(config_path)
+    if config is not None and not config.empty:
+        row = config.iloc[0]
+        st.write(
+            f"Saved threshold: **{float(row['threshold']):.2f}**. "
+            f"Saved ensemble weights: **{row['weights']}**."
+        )
 
+    st.subheader("Semantic Verbal Fluency")
     st.write(
         """
-        The acoustic features include recording duration, energy, silence and
-        voiced-segment measurements, zero-crossing rate, spectral centroid,
-        spectral bandwidth, spectral rolloff, spectral flatness, 20 MFCC
-        means and standard deviations, and 12 chroma means and standard
-        deviations.
-
-        The deployed feature extractor uses the recording's native sample
-        rate, a silence threshold of `top_db=20`, an FFT size of 2,048, and a
-        hop length of 512. The selected fusion decision threshold is
-        **0.61**.
+        The current feature extractor derives total alphabetic tokens, unique tokens,
+        repeated tokens, and type-token ratio from the transcript. The saved classifier
+        uses those four values and a threshold of 0.52.
         """
     )
-
-    st.write(
-        """
-        On the final quality-reviewed evaluation subset of **371 recordings**,
-        the reconstructed deployment pipeline achieved:
-
-        - **Accuracy:** 91.11%
-        - **Balanced accuracy:** 89.81%
-        - **ROC-AUC:** 91.41%
-        - **PR-AUC:** 92.93%
-
-        Its fusion probabilities had a correlation of **0.99885** with the
-        originally saved fusion predictions, and only **1 of 371**
-        classifications changed because the original acoustic extraction
-        source code was unavailable and had to be reconstructed.
-        """
-    )
-
-    st.caption(
-        "These are internal research evaluation results and do not represent "
-        "clinical validation."
-    )
-
-    st.subheader("Semantic Verbal Fluency Test model")
-    st.write(
-        """
-        The current model analyzes the list of animals entered by the participant. Its four
-        features are:
-        """
-    )
-    st.markdown(
-        """
-        - total responses;
-        - unique responses;
-        - repeated responses;
-        - type-token ratio.
-        """
-    )
-    st.write(
-        """
-        The model was developed using **226 subjects**: 113 participants with Alzheimer's disease
-        from the Pitt Corpus and 113 cognitively healthy comparison participants from the
-        Wisconsin Longitudinal Study. Its selected threshold is **0.52**. The reported internal
-        balanced accuracy was **89.82%** and ROC-AUC was **96.19%**.
-        """
-    )
-
     st.warning(
-        "These performance values come from internal evaluation. They do not establish clinical "
-        "accuracy or generalizability to hospitals, clinics, or the general population."
+        "The current tokenizer does not independently validate that each recognized word "
+        "is an animal. This is a known limitation of the application-level feature extraction."
     )
-
 
 with results_tab:
-    st.header("Cookie Theft Picture Description Task results")
+    st.header("Internal research evaluation artifacts")
 
-    picture_images = [
-        ("Model performance summary", "FINAL_metrics_summary.png"),
-        ("ROC curve", "FINAL_roc_curve.png"),
-        ("Precision-recall curve", "FINAL_precision_recall_curve.png"),
-        ("Confusion matrix", "FINAL_confusion_matrix.png"),
-        ("Normalized confusion matrix", "FINAL_confusion_matrix_normalized.png"),
-        ("Calibration curve", "FINAL_calibration_curve.png"),
-        ("Probability distributions", "FINAL_probability_distributions.png"),
-    ]
-
-    for title, filename in picture_images:
-        image_path = PICTURE_CHARTS / filename
-        if image_path.exists():
-            st.subheader(title)
-            st.image(str(image_path), width=650)
-        else:
-            st.warning(f"Missing chart: {filename}")
-
-    picture_metrics_path = PICTURE_DATA / "FINAL_metrics.csv"
-    if picture_metrics_path.exists():
-        st.subheader("Picture-description metrics")
-        st.dataframe(pd.read_csv(picture_metrics_path), use_container_width=True)
-
-    per_dataset_path = PICTURE_DATA / "FINAL_per_dataset_metrics.csv"
-    if per_dataset_path.exists():
-        st.subheader("Performance by dataset")
-        st.dataframe(pd.read_csv(per_dataset_path), use_container_width=True)
-
-    configuration_path = PICTURE_DATA / "validation_selected_configuration.csv"
-    if configuration_path.exists():
-        st.subheader("Selected validation configuration")
-        st.dataframe(pd.read_csv(configuration_path), use_container_width=True)
+    st.subheader("Cookie Theft transcript–acoustic fusion experiment")
+    picture_metrics = read_csv_if_present(PICTURE_DATA / "FINAL_metrics.csv")
+    if picture_metrics is not None and not picture_metrics.empty:
+        row = picture_metrics.iloc[0]
+        cols = st.columns(4)
+        cols[0].metric("Accuracy", f"{float(row['accuracy']):.1%}")
+        cols[1].metric("Balanced accuracy", f"{float(row['balanced_accuracy']):.1%}")
+        cols[2].metric("ROC-AUC", f"{float(row['roc_auc']):.1%}")
+        cols[3].metric("Average precision", f"{float(row['average_precision']):.1%}")
+        st.caption(
+            f"Artifact status: {row.get('evaluation_status', 'not specified')}. "
+            "These metrics are from a separate transcript–acoustic fusion artifact, "
+            "not the current four-component transcript-only app inference path."
+        )
+    show_chart(PICTURE_CHARTS, "FINAL_metrics_summary.png", "Fusion experiment: metric summary")
+    show_chart(PICTURE_CHARTS, "FINAL_roc_curve.png", "Fusion experiment: ROC curve")
+    show_chart(PICTURE_CHARTS, "FINAL_precision_recall_curve.png", "Fusion experiment: precision–recall curve")
+    show_chart(PICTURE_CHARTS, "FINAL_confusion_matrix.png", "Fusion experiment: confusion matrix")
 
     report_path = PICTURE_DATA / "FINAL_evaluation_report.txt"
     if report_path.exists():
-        st.subheader("Evaluation report")
-        st.code(report_path.read_text(encoding="utf-8", errors="replace"))
+        with st.expander("Read the complete evaluation report and its caveats"):
+            st.code(report_path.read_text(encoding="utf-8-sig", errors="replace"))
+
+    st.error(
+        "Important: the Cookie Theft report describes a post-hoc quality-filtered test subset "
+        "(371 retained from 404 after prior model-error inspection). It is not an unbiased "
+        "untouched-test estimate. The report also notes that the acoustic extraction source "
+        "was unavailable and the fusion pipeline was reconstructed."
+    )
 
     st.divider()
-    st.header("Semantic Verbal Fluency Test results")
+    st.subheader("Semantic Verbal Fluency nested cross-validation")
+    fluency_metrics = read_csv_if_present(FLUENCY_DATA / "final_metrics.csv")
+    if fluency_metrics is not None and not fluency_metrics.empty:
+        row = fluency_metrics.iloc[0]
+        cols = st.columns(4)
+        cols[0].metric("Accuracy", f"{float(row['accuracy']):.1%}")
+        cols[1].metric("Balanced accuracy", f"{float(row['balanced_accuracy']):.1%}")
+        cols[2].metric("ROC-AUC", f"{float(row['roc_auc']):.1%}")
+        cols[3].metric("Average precision", f"{float(row['average_precision']):.1%}")
 
-    fluency_images = [
-        ("Confusion matrix", "final_confusion_matrix.png"),
-        ("ROC curve", "final_roc_curve.png"),
-        ("Precision-recall curve", "final_precision_recall_curve.png"),
-    ]
+    ci = read_csv_if_present(FLUENCY_DATA / "bootstrap_confidence_intervals.csv")
+    if ci is not None and not ci.empty:
+        auc_row = ci.loc[ci["metric"] == "roc_auc"]
+        if not auc_row.empty:
+            row = auc_row.iloc[0]
+            st.caption(
+                f"ROC-AUC 95% bootstrap interval: "
+                f"{float(row['ci_95_lower']):.1%}–{float(row['ci_95_upper']):.1%}."
+            )
 
-    for title, filename in fluency_images:
-        image_path = FLUENCY_CHARTS / filename
-        if image_path.exists():
-            st.subheader(title)
-            st.image(str(image_path), width=650)
-        else:
-            st.warning(f"Missing chart: {filename}")
+    show_chart(FLUENCY_CHARTS, "final_confusion_matrix.png", "Fluency: confusion matrix")
+    show_chart(FLUENCY_CHARTS, "final_roc_curve.png", "Fluency: ROC curve")
+    show_chart(FLUENCY_CHARTS, "final_precision_recall_curve.png", "Fluency: precision–recall curve")
 
-    fluency_tables = [
-        ("Fluency metrics", "final_metrics.csv"),
-        ("Model coefficients", "final_coefficients.csv"),
-        ("Bootstrap confidence intervals", "bootstrap_confidence_intervals.csv"),
-        ("Nested cross-validation fold metrics", "nested_fold_metrics.csv"),
-    ]
-
-    for title, filename in fluency_tables:
-        table_path = FLUENCY_DATA / filename
-        if table_path.exists():
-            st.subheader(title)
-            st.dataframe(pd.read_csv(table_path), use_container_width=True)
-
-    predictions_path = FLUENCY_DATA / "nested_out_of_fold_predictions.csv"
-    if predictions_path.exists():
-        with st.expander("Out-of-fold prediction data"):
-            st.dataframe(pd.read_csv(predictions_path), use_container_width=True)
-
-    st.caption(
-        "These charts and tables report internal research evaluation. "
-        "They do not establish clinical validity."
+    st.warning(
+        "The 226-subject fluency experiment uses Pitt for AD cases and WLS for controls. "
+        "Because diagnosis and dataset source are linked, the reported nested cross-validation "
+        "metrics may reflect source differences as well as language differences."
     )
-
 
 with limits_tab:
-    st.header("Important limitations")
+    st.header("Limitations and interpretation")
+    limitations = [
+        ("No clinical validation", "No independent clinical validation has been completed. Scores are not diagnostic probabilities or clinical screening results."),
+        ("Cookie Theft artifact mismatch", "The stored transcript–acoustic fusion evaluation is not the same as the four-component transcript-only inference path loaded by the current app."),
+        ("Post-hoc test filtering", "The Cookie Theft fusion report states that the test subset was filtered after prior model-error inspection."),
+        ("Dataset-source confounding", "The fluency experiment uses Pitt AD cases and WLS controls, so diagnosis and source dataset are confounded."),
+        ("Transcription error", "Whisper errors, accents, background noise, recording quality, and language variation can affect transcript-derived features."),
+        ("Fluency parser", "The current feature extractor counts alphabetic tokens and does not verify animal-category membership."),
+        ("Generalizability", "Age, education, language background, hearing, speech differences, and collection conditions may influence outputs."),
+    ]
+    for title, detail in limitations:
+        with st.expander(title):
+            st.write(detail)
 
-    st.subheader("Dataset-source confounding")
-    st.write(
-        """
-        The Semantic Verbal Fluency Test model compares Alzheimer's disease participants from
-        Pitt with healthy participants from WLS. Because diagnosis and dataset source are linked,
-        differences in recording conditions, transcription conventions, recruitment, age,
-        education, demographics, or study procedures may influence the model.
-        """
-    )
-
-    st.subheader("External validation")
-    st.write(
-        """
-        Both models require testing on independent datasets collected under matched conditions.
-        Internal evaluation alone is not enough to support real-world or clinical conclusions.
-        """
-    )
-    st.subheader("Not a diagnosis")
-    st.write(
-        """
-        A score above a research threshold does not mean that a participant has Alzheimer's
-        disease, mild cognitive impairment, or another neurological condition. Language can be
-        affected by age, education, language background, fatigue, anxiety, hearing, speech
-        disorders, and many other factors.
-        """
+    st.error(
+        "Do not use NeuroVoice to diagnose, rule out, screen for, or make treatment decisions "
+        "about any medical condition. A score above a model threshold is only a model-specific "
+        "research output."
     )
