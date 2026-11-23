@@ -1,4 +1,4 @@
-﻿venv/
+venv/
 .venv/
 __pycache__/
 *.py[cod]
@@ -13,9 +13,11 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Development backups and obsolete files
+# Local development artifacts and backups
 *_before_*.py
 *_backup.py
 *.bak
-pages/
-{
+*.backup_*
+*_backup_*/
+*_backup_*
+*_before_*
