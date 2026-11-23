@@ -1,4 +1,4 @@
-﻿venv/
+venv/
 .venv/
 __pycache__/
 *.pyc
@@ -6,6 +6,13 @@ __pycache__/
 *.ipynb
 .git/
 .gitignore
+
+# Local experiments and historical backups are preserved in Git history
+# but excluded from the production deployment slug.
+*_backup_*/
+*_backup_*
+*.backup_*
+*_before_*
 NeuroVoice_fusion_patched/
 views/test_before_pdf_report.py
 views/test_before_results_update.py
