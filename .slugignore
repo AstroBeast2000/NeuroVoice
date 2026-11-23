@@ -9,3 +9,10 @@ __pycache__/
 NeuroVoice_fusion_patched/
 views/test_before_pdf_report.py
 views/test_before_results_update.py
+
+# Exclude local development snapshots from deployment
+*_backup_*/
+*_backup/
+*_backup.py
+*_before_*.py
+*.bak
